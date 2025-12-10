@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
 import { Session, Message, MessageType, User, UserRole } from '../types';
@@ -13,6 +13,7 @@ interface UserInterfaceProps {
 
 export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -22,16 +23,46 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   // Load sessions on mount
   useEffect(() => {
-    loadSessions();
+    // Set current user ID for filtered sessions
+    communicationService.setCurrentUserId(currentUser.id);
+    
     loadAllMessages();
-    // Poll for new sessions and messages (less frequent with real-time)
+    
+    // Subscribe to real-time sessions updates
+    const unsubscribeSessions = communicationService.subscribeToSessions((newSessions) => {
+      // Filter sessions to only show those that include current user
+      const userSessions = newSessions.filter(session => 
+        session.playerIds && session.playerIds.includes(currentUser.id)
+      );
+      setSessions(userSessions);
+      
+      // Auto-select first session if none selected
+      const currentActiveId = activeSessionIdRef.current;
+      if (!currentActiveId && userSessions.length > 0) {
+        setActiveSessionId(userSessions[0].id);
+      }
+      // Clear active session if it was deleted
+      if (currentActiveId && !userSessions.find(s => s.id === currentActiveId)) {
+        setActiveSessionId(null);
+      }
+    });
+
+    // Poll for messages (less frequent now with real-time sessions)
     const interval = setInterval(() => {
-      loadSessions();
       loadAllMessages();
-    }, 5000);
-    return () => clearInterval(interval);
+    }, 10000); // Increased interval since sessions are now real-time
+    
+    return () => {
+      unsubscribeSessions();
+      clearInterval(interval);
+    };
   }, [currentUser]);
 
   // Load messages when session changes
@@ -59,23 +90,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     };
   }, [activeSessionId]);
 
-  const loadSessions = async () => {
-    // Get sessions filtered by user-specific deletions
-    const allSessions = await communicationService.getSessionsForUser(currentUser.id);
-    // Filter sessions to only show those that include current user
-    const userSessions = allSessions.filter(session => 
-      session.playerIds && session.playerIds.includes(currentUser.id)
-    );
-    setSessions(userSessions);
-    // Auto-select first session if none selected
-    if (!activeSessionId && userSessions.length > 0) {
-      setActiveSessionId(userSessions[0].id);
-    }
-    // Clear active session if it was deleted
-    if (activeSessionId && !userSessions.find(s => s.id === activeSessionId)) {
-      setActiveSessionId(null);
-    }
-  };
+  // Removed loadSessions - now handled by real-time subscription
 
   const loadAllMessages = async () => {
     // Load messages from all sessions for thumbnail generation
@@ -123,8 +138,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     // Delete session only for current user (like iMessage)
     if (currentUser) {
       await communicationService.deleteSessionForUser(currentUser.id, sessionId);
-      // Reload sessions to reflect deletion
-      await loadSessions();
+      // Sessions will update automatically via real-time subscription
       // If the deleted session was active, clear it
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
@@ -170,8 +184,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     setNewSessionTitle('');
     setShowCreateSession(false);
     setActiveSessionId(newSession.id);
-    // Reload sessions to show the new one
-    await loadSessions();
+    // Sessions will update automatically via real-time subscription
   };
 
   const activeSession = sessions.find(s => s.id === activeSessionId);

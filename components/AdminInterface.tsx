@@ -47,17 +47,28 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
 
   // Load sessions, messages, and players on mount
   useEffect(() => {
-    loadSessions();
+    // Set current user ID for filtered sessions
+    communicationService.setCurrentUserId(currentUser.id);
+    
     loadAllMessages();
     loadPlayers();
-    // Poll for new sessions and messages (less frequent now with real-time)
+    
+    // Subscribe to real-time sessions updates
+    const unsubscribeSessions = communicationService.subscribeToSessions((newSessions) => {
+      setSessions(newSessions);
+    });
+
+    // Poll for players and messages (less frequent now with real-time sessions)
     const interval = setInterval(() => {
-      loadSessions();
       loadAllMessages();
       loadPlayers();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    }, 10000); // Increased interval since sessions are now real-time
+    
+    return () => {
+      unsubscribeSessions();
+      clearInterval(interval);
+    };
+  }, [currentUser]);
 
   // Clear active session when player selection changes (new flow: player first)
   useEffect(() => {
@@ -91,11 +102,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     };
   }, [activeSessionId]);
 
-  const loadSessions = async () => {
-    // Get sessions filtered by user-specific deletions
-    const allSessions = await communicationService.getSessionsForUser(currentUser.id);
-    setSessions(allSessions);
-  };
+  // Removed loadSessions - now handled by real-time subscription
 
   const loadAllMessages = async () => {
     // Load messages from all sessions for thumbnail generation
@@ -137,7 +144,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     setNewSessionTitle('');
     setShowCreateSession(false);
     setActiveSessionId(newSession.id);
-    await loadSessions();
+    // Sessions will update automatically via real-time subscription
   };
 
   const handleCreatePlayer = async () => {
@@ -201,8 +208,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   const handleDeleteSession = (sessionId: string) => {
     // Delete session only for the admin user (like iMessage)
     communicationService.deleteSessionForUser(currentUser.id, sessionId);
-    // Reload sessions to reflect deletion
-    loadSessions();
+    // Sessions will update automatically via real-time subscription
     // If the deleted session was active, clear it
     if (activeSessionId === sessionId) {
       setActiveSessionId(null);

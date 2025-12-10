@@ -12,6 +12,9 @@ const isSupabaseConfigured = () => {
 class CommunicationService {
   private listeners: Map<string, Set<(messages: Message[]) => void>> = new Map();
   private realtimeSubscriptions: Map<string, any> = new Map();
+  // Add sessions list listeners
+  private sessionsListeners: Set<(sessions: Session[]) => void> = new Set();
+  private currentUserId: string | null = null; // Track current user for filtered sessions
 
   constructor() {
     // Set up real-time subscriptions if Supabase is configured
@@ -54,12 +57,38 @@ class CommunicationService {
           table: 'sessions'
         },
         () => {
-          // Reload sessions for all active listeners
+          // Reload sessions list for all listeners
+          this.notifySessionsListeners();
+          // Also reload messages for active listeners (existing behavior)
           this.listeners.forEach((_, sessionId) => {
             this.loadMessages(sessionId).then(messages => {
               this.notifyListeners(sessionId, messages);
             });
           });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'session_players'
+        },
+        () => {
+          // When players are added/removed from sessions, reload sessions
+          this.notifySessionsListeners();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_session_deletions'
+        },
+        () => {
+          // When sessions are deleted for users, reload sessions
+          this.notifySessionsListeners();
         }
       )
       .subscribe();
@@ -505,6 +534,38 @@ class CommunicationService {
     }
   }
 
+  // Add method to set current user ID for filtered sessions
+  setCurrentUserId(userId: string | null): void {
+    this.currentUserId = userId;
+  }
+
+  // Add method to subscribe to sessions list changes
+  subscribeToSessions(callback: (sessions: Session[]) => void): () => void {
+    this.sessionsListeners.add(callback);
+    
+    // Load initial sessions
+    this.loadSessionsForListener().then(sessions => {
+      callback(sessions);
+    });
+
+    // Return unsubscribe function
+    return () => {
+      this.sessionsListeners.delete(callback);
+    };
+  }
+
+  private async loadSessionsForListener(): Promise<Session[]> {
+    if (this.currentUserId) {
+      return await this.getSessionsForUser(this.currentUserId);
+    }
+    return await this.getSessions();
+  }
+
+  private async notifySessionsListeners(): void {
+    const sessions = await this.loadSessionsForListener();
+    this.sessionsListeners.forEach(callback => callback(sessions));
+  }
+
   // Real-time updates via listeners
   subscribe(sessionId: string, callback: (messages: Message[]) => void): () => void {
     if (!this.listeners.has(sessionId)) {
@@ -556,6 +617,7 @@ class CommunicationService {
     });
     this.realtimeSubscriptions.clear();
     this.listeners.clear();
+    this.sessionsListeners.clear();
   }
 }
 
