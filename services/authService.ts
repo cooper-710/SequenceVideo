@@ -106,8 +106,19 @@ export const createUserWithToken = async (
       .select()
       .single();
 
-    if (error || !data) {
+    if (error) {
       console.error('Error creating user:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      return null;
+    }
+
+    if (!data) {
+      console.error('No data returned from user creation');
       return null;
     }
 

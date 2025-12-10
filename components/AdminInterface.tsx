@@ -140,7 +140,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       setPlayerDropdownOpen(false);
     } else {
       console.error('Failed to create player');
-      // Optionally show an error message to the user
+      alert('Failed to create player. Check the console for details. Make sure you have run the SQL policies in Supabase (see add-delete-policy.sql).');
     }
   };
 
