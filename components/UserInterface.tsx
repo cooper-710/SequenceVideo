@@ -215,7 +215,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
           <img 
             src={sequenceLogo} 
             alt="Sequence" 
-            className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
+            className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
           />
           <div className="hidden sm:block">
             <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">{currentUser.name}</h2>

@@ -12,6 +12,21 @@ interface AdminInterfaceProps {
   currentUser: User;
 }
 
+// Helper function to get two initials from a name
+const getInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    // Multiple words: first letter of first word + first letter of last word
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  } else if (parts.length === 1 && parts[0].length >= 2) {
+    // Single word with 2+ characters: first two letters
+    return parts[0].substring(0, 2).toUpperCase();
+  } else {
+    // Single character: just that character
+    return parts[0].charAt(0).toUpperCase();
+  }
+};
+
 export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -264,7 +279,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
           <img 
             src={sequenceLogo} 
             alt="Sequence" 
-            className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
+            className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
           />
           <div className="hidden sm:block">
             <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">Admin</h2>
@@ -359,14 +374,6 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                                     </h3>
                                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                       <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-wide">{format(session.date, 'MMM d')}</span>
-                                      <span className="w-0.5 h-0.5 rounded-full bg-neutral-600" />
-                                      <span className={`text-[9px] px-1.5 py-px rounded-md border ${
-                                        isActive 
-                                          ? 'bg-sequence-orange/10 border-sequence-orange/20 text-sequence-orange' 
-                                          : 'bg-neutral-800 border-neutral-700 text-neutral-400'
-                                      }`}>
-                                        {session.tags[0]}
-                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -425,8 +432,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
             >
               {selectedPlayer ? (
                 <>
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500/80 to-blue-600/80 border border-neutral-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {selectedPlayer.name.charAt(0).toUpperCase()}
+                  <div className="w-6 h-6 rounded-full bg-orange-500 border border-neutral-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {getInitials(selectedPlayer.name)}
                   </div>
                   <span className="truncate">{selectedPlayer.name}</span>
                   <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform flex-shrink-0 ${playerDropdownOpen ? 'rotate-180' : ''}`} />
@@ -475,16 +482,16 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                                   onClick={() => handlePlayerSelectionChange(player.id)}
                                   className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 relative ${
                                     isSelected
-                                      ? 'bg-blue-500/10 border-blue-500/50 hover:bg-blue-500/15'
+                                      ? 'bg-orange-500/10 border-orange-500/50 hover:bg-orange-500/15'
                                       : 'bg-neutral-900/50 border-neutral-700 hover:bg-neutral-800/50 hover:border-neutral-600'
                                   } ${isConfirmingDelete ? 'ring-2 ring-red-500/50' : ''}`}
                                 >
                                   <div className="relative flex-shrink-0">
-                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500/80 to-blue-600/80 border-2 border-neutral-700 flex items-center justify-center text-white text-xs sm:text-sm font-bold">
-                                      {player.name.charAt(0).toUpperCase()}
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-orange-500 border-2 border-neutral-700 flex items-center justify-center text-white text-xs sm:text-sm font-bold">
+                                      {getInitials(player.name)}
                                     </div>
                                     {isSelected && (
-                                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-blue-500 border-2 border-neutral-900 flex items-center justify-center">
+                                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-orange-500 border-2 border-neutral-900 flex items-center justify-center">
                                         <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                                       </div>
                                     )}
@@ -540,7 +547,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                         {/* Add Player Button */}
                         <button
                           onClick={() => setShowCreatePlayer(true)}
-                          className="w-full flex items-center gap-2 p-3 rounded-xl border border-dashed border-neutral-700 text-neutral-400 text-xs sm:text-sm font-medium hover:border-blue-500/50 hover:text-blue-400 hover:bg-blue-500/5 transition-all duration-200 mt-2"
+                          className="w-full flex items-center gap-2 p-3 rounded-xl border border-dashed border-neutral-700 text-neutral-400 text-xs sm:text-sm font-medium hover:border-orange-500/50 hover:text-orange-400 hover:bg-orange-500/5 transition-all duration-200 mt-2"
                         >
                           <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center">
                             <Plus className="w-3 h-3" />
@@ -562,13 +569,13 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                             }
                           }}
                           placeholder="Player name..."
-                          className="w-full px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 text-sm min-h-[36px]"
+                          className="w-full px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:border-orange-500 text-sm min-h-[36px]"
                           autoFocus
                         />
                         <div className="flex gap-2">
                           <button
                             onClick={handleCreatePlayer}
-                            className="flex-1 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs sm:text-sm font-medium transition-colors touch-manipulation min-h-[36px]"
+                            className="flex-1 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs sm:text-sm font-medium transition-colors touch-manipulation min-h-[36px]"
                           >
                             Create
                           </button>
@@ -596,9 +603,9 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
               {!showCreateSession ? (
                 <button 
                   onClick={() => setShowCreateSession(true)}
-                  className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg border border-dashed border-neutral-700 text-neutral-400 text-xs sm:text-sm font-medium hover:border-blue-500/50 hover:text-blue-400 hover:bg-blue-500/5 transition-all duration-200 flex items-center gap-2 group touch-manipulation"
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg border border-dashed border-neutral-700 text-neutral-400 text-xs sm:text-sm font-medium hover:border-orange-500/50 hover:text-orange-400 hover:bg-orange-500/5 transition-all duration-200 flex items-center gap-2 group touch-manipulation"
                 >
-                  <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                  <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
                     <Plus className="w-3 h-3" />
                   </div>
                   <span className="hidden sm:inline">New Session</span>
@@ -617,12 +624,12 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                       }
                     }}
                     placeholder="Session title..."
-                    className="px-3 py-1.5 sm:py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 text-sm w-40 sm:w-48 min-h-[36px]"
+                    className="px-3 py-1.5 sm:py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:border-orange-500 text-sm w-40 sm:w-48 min-h-[36px]"
                     autoFocus
                   />
                   <button
                     onClick={handleCreateSession}
-                    className="px-3 py-1.5 sm:py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs sm:text-sm font-medium transition-colors touch-manipulation min-h-[36px]"
+                    className="px-3 py-1.5 sm:py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs sm:text-sm font-medium transition-colors touch-manipulation min-h-[36px]"
                   >
                     Create
                   </button>

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Message, MessageType, User, Annotation } from '../types';
+import { Message, MessageType, User, UserRole, Annotation } from '../types';
 import { format } from 'date-fns';
 import { Play, Send, Video, Mic, X } from 'lucide-react';
 import { VideoPlayer } from './VideoPlayer';
@@ -25,6 +25,21 @@ interface PendingAttachment {
   };
 }
 
+
+// Helper function to get two initials from a name
+const getInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    // Multiple words: first letter of first word + first letter of last word
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  } else if (parts.length === 1 && parts[0].length >= 2) {
+    // Single word with 2+ characters: first two letters
+    return parts[0].substring(0, 2).toUpperCase();
+  } else {
+    // Single character: just that character
+    return parts[0].charAt(0).toUpperCase();
+  }
+};
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentUser, onSendMessage, onUpdateMessage, otherUserName = 'Admin' }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -413,12 +428,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}>
               <div className={`flex gap-2 sm:gap-3 max-w-full ${isVideo ? 'w-full md:w-[95%] lg:w-[90%]' : 'max-w-[85%] sm:max-w-[90%] md:max-w-[75%]'} ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
-                <div className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full shadow-lg border-2 ${isMe ? 'border-sequence-orange/20' : 'border-neutral-800'} overflow-hidden mt-auto mb-1 bg-neutral-800`}>
-                   <img 
-                     src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23999' width='200' height='200'/%3E%3Ctext fill='%23fff' font-family='sans-serif' font-size='80' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3E%3F%3C/text%3E%3C/svg%3E"
-                     alt={isMe ? currentUser.name : otherUserName}
-                     className="w-full h-full object-cover"
-                   />
+                <div className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full shadow-lg border-2 ${isMe ? 'border-sequence-orange/20' : 'border-neutral-800'} overflow-hidden mt-auto mb-1 ${
+                  isMe 
+                    ? (currentUser.role === UserRole.COACH ? 'bg-gradient-to-br from-neutral-900 to-black' : 'bg-orange-500')
+                    : (otherUserName === 'Admin' ? 'bg-gradient-to-br from-neutral-900 to-black' : 'bg-orange-500')
+                } flex items-center justify-center text-white text-xs font-bold`}>
+                  {isMe 
+                    ? (currentUser.role === UserRole.COACH ? 'S' : getInitials(currentUser.name))
+                    : (otherUserName === 'Admin' ? 'S' : getInitials(otherUserName))
+                  }
                 </div>
 
                 <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} w-full min-w-0`}>

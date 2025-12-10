@@ -11,23 +11,26 @@ interface SessionHeaderProps {
 
 export const SessionHeader: React.FC<SessionHeaderProps> = ({ session, coach, onBackMobile }) => {
   return (
-    <div className="h-14 sm:h-16 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-4 sticky top-0 z-20">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-        <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <h1 className="text-xs sm:text-sm font-bold text-white leading-tight tracking-wide truncate">{session.title}</h1>
-            <span className="hidden sm:inline-flex w-1.5 h-1.5 rounded-full bg-sequence-orange/80 shadow-[0_0_6px_rgba(249,115,22,0.5)] flex-shrink-0" />
+    <div className="h-16 sm:h-20 border-b border-white/[0.03] bg-gradient-to-b from-black/95 via-black/90 to-black/95 backdrop-blur-2xl flex items-center justify-between px-4 sm:px-6 sticky top-0 z-20 shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+        <div className="flex flex-col min-w-0 flex-1 gap-1">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <h1 className="text-sm sm:text-base font-semibold text-white leading-tight tracking-tight truncate">
+              {session.title}
+            </h1>
+            <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+              <span className="w-1 h-1 rounded-full bg-sequence-orange/60 shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+            </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
-             <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-medium text-neutral-500">
-               <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-600 flex-shrink-0" />
-               <span className="hidden xs:inline">{format(session.date, 'MMMM d, yyyy')}</span>
-               <span className="xs:hidden">{format(session.date, 'MMM d')}</span>
-             </div>
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-neutral-400 tracking-wide">
+              <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-neutral-500/60 flex-shrink-0" />
+              <span className="hidden sm:inline font-normal">{format(session.date, 'MMMM d, yyyy')}</span>
+              <span className="sm:hidden">{format(session.date, 'MMM d, yyyy')}</span>
+            </div>
           </div>
         </div>
       </div>
-
     </div>
   );
 };
