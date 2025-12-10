@@ -13,4 +13,6 @@ export default defineConfig({
       '@': path.resolve(__dirname, '.'),
     }
   }
+  // Vite automatically handles VITE_ prefixed environment variables
+  // No need for manual define statements
 });

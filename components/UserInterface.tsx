@@ -5,47 +5,34 @@ import { Session, Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
 import { Video, Plus, ChevronDown, Film, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
+import sequenceLogo from '../Sequence.png';
 
-// Player 1's identity for testing
-const PLAYER_1_ID = 'player1';
+interface UserInterfaceProps {
+  currentUser: User;
+}
 
-export const UserInterface: React.FC = () => {
+export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showCreateSession, setShowCreateSession] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-  // Load Player 1's identity and sessions on mount
+  // Load sessions on mount
   useEffect(() => {
-    // Get or create Player 1
-    let player1 = communicationService.getPlayer(PLAYER_1_ID);
-    if (!player1) {
-      // Create Player 1 if it doesn't exist
-      player1 = {
-        id: PLAYER_1_ID,
-        name: 'Player 1',
-        role: UserRole.PLAYER,
-        avatarUrl: ''
-      };
-      communicationService.addPlayer(player1);
-    }
-    setCurrentUser(player1);
-    
     loadSessions();
     loadAllMessages();
-    // Poll for new sessions and messages
+    // Poll for new sessions and messages (less frequent with real-time)
     const interval = setInterval(() => {
       loadSessions();
       loadAllMessages();
-    }, 3000);
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -61,7 +48,7 @@ export const UserInterface: React.FC = () => {
       setMessages(newMessages);
     });
 
-    // Also poll for cross-tab updates
+    // Also poll for cross-tab updates (fallback)
     const stopPolling = communicationService.startPolling(activeSessionId, (newMessages) => {
       setMessages(newMessages);
     });
@@ -72,45 +59,45 @@ export const UserInterface: React.FC = () => {
     };
   }, [activeSessionId]);
 
-  const loadSessions = () => {
+  const loadSessions = async () => {
     // Get sessions filtered by user-specific deletions
-    const allSessions = communicationService.getSessionsForUser(PLAYER_1_ID);
-    // Filter sessions to only show those that include Player 1
-    const player1Sessions = allSessions.filter(session => 
-      session.playerIds && session.playerIds.includes(PLAYER_1_ID)
+    const allSessions = await communicationService.getSessionsForUser(currentUser.id);
+    // Filter sessions to only show those that include current user
+    const userSessions = allSessions.filter(session => 
+      session.playerIds && session.playerIds.includes(currentUser.id)
     );
-    setSessions(player1Sessions);
+    setSessions(userSessions);
     // Auto-select first session if none selected
-    if (!activeSessionId && player1Sessions.length > 0) {
-      setActiveSessionId(player1Sessions[0].id);
+    if (!activeSessionId && userSessions.length > 0) {
+      setActiveSessionId(userSessions[0].id);
     }
     // Clear active session if it was deleted
-    if (activeSessionId && !player1Sessions.find(s => s.id === activeSessionId)) {
+    if (activeSessionId && !userSessions.find(s => s.id === activeSessionId)) {
       setActiveSessionId(null);
     }
   };
 
-  const loadAllMessages = () => {
+  const loadAllMessages = async () => {
     // Load messages from all sessions for thumbnail generation
-    const allSessions = communicationService.getSessions();
+    const allSessions = await communicationService.getSessions();
     const allMsgs: Message[] = [];
-    allSessions.forEach(session => {
-      const sessionMessages = communicationService.getMessages(session.id);
+    for (const session of allSessions) {
+      const sessionMessages = await communicationService.getMessages(session.id);
       allMsgs.push(...sessionMessages);
-    });
+    }
     setAllMessages(allMsgs);
   };
 
-  const loadMessages = (sessionId: string) => {
-    const sessionMessages = communicationService.getMessages(sessionId);
+  const loadMessages = async (sessionId: string) => {
+    const sessionMessages = await communicationService.getMessages(sessionId);
     setMessages(sessionMessages);
   };
 
-  const handleSendMessage = (content: string, type: MessageType, metadata?: Message['metadata']) => {
+  const handleSendMessage = async (content: string, type: MessageType, metadata?: Message['metadata']) => {
     if (!activeSessionId || !currentUser) return;
 
     const newMessage: Message = {
-      id: `m${Date.now()}`,
+      id: crypto.randomUUID(),
       sessionId: activeSessionId,
       senderId: currentUser.id,
       type,
@@ -119,12 +106,12 @@ export const UserInterface: React.FC = () => {
       metadata,
     };
 
-    communicationService.sendMessage(activeSessionId, newMessage);
+    await communicationService.sendMessage(activeSessionId, newMessage);
   };
 
-  const handleUpdateMessage = (messageId: string, updates: Partial<Message>) => {
+  const handleUpdateMessage = async (messageId: string, updates: Partial<Message>) => {
     if (!activeSessionId) return;
-    communicationService.updateMessage(activeSessionId, messageId, updates);
+    await communicationService.updateMessage(activeSessionId, messageId, updates);
   };
 
   const handleSelectSession = (id: string) => {
@@ -132,12 +119,12 @@ export const UserInterface: React.FC = () => {
     setSessionDropdownOpen(false);
   };
 
-  const handleDeleteSession = (sessionId: string) => {
-    // Delete session only for Player 1 (like iMessage)
+  const handleDeleteSession = async (sessionId: string) => {
+    // Delete session only for current user (like iMessage)
     if (currentUser) {
-      communicationService.deleteSessionForUser(currentUser.id, sessionId);
+      await communicationService.deleteSessionForUser(currentUser.id, sessionId);
       // Reload sessions to reflect deletion
-      loadSessions();
+      await loadSessions();
       // If the deleted session was active, clear it
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
@@ -165,25 +152,26 @@ export const UserInterface: React.FC = () => {
     return videoMessage.metadata?.thumbnailUrl || null;
   };
 
-  const handleCreateSession = () => {
+  const handleCreateSession = async () => {
     if (!newSessionTitle.trim() || !currentUser) return;
 
+    const sessionId = crypto.randomUUID();
     const newSession: Session = {
-      id: `s${Date.now()}`,
+      id: sessionId,
       title: newSessionTitle,
       date: new Date(),
       status: 'active',
-      coachId: 'admin', // Will be assigned to admin when they join
+      coachId: '', // Will be assigned to admin when they join
       playerIds: [currentUser.id],
       tags: ['New Session']
     };
 
-    communicationService.createSession(newSession);
+    await communicationService.createSession(newSession);
     setNewSessionTitle('');
     setShowCreateSession(false);
     setActiveSessionId(newSession.id);
     // Reload sessions to show the new one
-    loadSessions();
+    await loadSessions();
   };
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
@@ -217,14 +205,6 @@ export const UserInterface: React.FC = () => {
     };
   };
 
-  // Don't render until currentUser is loaded
-  if (!currentUser) {
-    return (
-      <div className="flex h-screen w-full bg-black items-center justify-center">
-        <div className="text-neutral-400">Loading Player 1...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-screen w-full bg-black overflow-hidden font-sans text-white">
@@ -232,12 +212,13 @@ export const UserInterface: React.FC = () => {
       <div className="h-14 sm:h-16 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-4 sticky top-0 z-30">
         {/* Left: Video Labs Branding */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-sequence-orange to-orange-600 flex items-center justify-center shadow-lg shadow-orange-900/20">
-            <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-          </div>
+          <img 
+            src={sequenceLogo} 
+            alt="Sequence" 
+            className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
+          />
           <div className="hidden sm:block">
-            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">Video Labs</h2>
-            <p className="text-[10px] text-neutral-400">Recent training & analysis</p>
+            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">{currentUser.name}</h2>
           </div>
         </div>
 

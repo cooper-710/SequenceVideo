@@ -2,26 +2,125 @@ import React, { useState, useEffect } from 'react';
 import { AdminInterface } from './components/AdminInterface';
 import { UserInterface } from './components/UserInterface';
 import { Users, User as UserIcon } from 'lucide-react';
+import { extractPlayerNameFromUrl, getStoredToken, storeToken, getUserFromToken, getFirstAdminUser, getPlayerByName } from './services/authService';
+import { User, UserRole } from './types';
 
-type ViewMode = 'admin' | 'user' | 'select';
+type ViewMode = 'admin' | 'user' | 'select' | 'loading' | 'invalid';
 
 function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>('select');
+  const [viewMode, setViewMode] = useState<ViewMode>('loading');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  // Check URL hash for view mode
+  // Check for token in URL or localStorage on mount
   useEffect(() => {
-    const hash = window.location.hash.slice(1);
-    if (hash === 'admin' || hash === 'user') {
-      setViewMode(hash);
-    }
+    const initializeAuth = async () => {
+      const path = window.location.pathname;
+      
+      // Check if accessing admin directly (no token needed)
+      if (path === '/admin' || path.startsWith('/admin/')) {
+        // Try to get admin user
+        const adminUser = await getFirstAdminUser();
+        if (adminUser) {
+          setCurrentUser(adminUser);
+          setViewMode('admin');
+          return;
+        }
+        // If no admin found, show invalid with helpful message
+        console.error('No admin user found. Please ensure at least one user with role "COACH" exists in the database.');
+        setViewMode('invalid');
+        return;
+      }
+      
+      // Check if accessing player via name-based link: /player/{playerName}
+      const playerName = extractPlayerNameFromUrl();
+      
+      if (playerName) {
+        // Get player user by name
+        const user = await getPlayerByName(playerName);
+        
+        if (user) {
+          setCurrentUser(user);
+          // Store user ID in localStorage for persistence (using name as key)
+          localStorage.setItem('player_name', playerName);
+          // Players always use 'user' view mode
+          setViewMode('user');
+          return;
+        } else {
+          // Player name not found
+          setViewMode('invalid');
+          return;
+        }
+      }
+      
+      // If no URL player name, try stored player name (for players)
+      const storedPlayerName = localStorage.getItem('player_name');
+      if (storedPlayerName) {
+        const user = await getPlayerByName(storedPlayerName);
+        if (user) {
+          setCurrentUser(user);
+          setViewMode('user');
+          return;
+        }
+      }
+      
+      // Fallback: try stored token (for backward compatibility)
+      const storedToken = getStoredToken();
+      if (storedToken) {
+        const user = await getUserFromToken(storedToken);
+        if (user) {
+          setCurrentUser(user);
+          setViewMode(user.role === UserRole.COACH ? 'admin' : 'user');
+          return;
+        }
+      }
+      
+      // No valid token found - show select screen
+      setViewMode('select');
+    };
+
+    initializeAuth();
   }, []);
 
-  // Update URL hash when view changes
+  // Update URL hash when view changes (for non-token access)
   useEffect(() => {
-    if (viewMode !== 'select') {
+    if (viewMode !== 'select' && viewMode !== 'loading' && viewMode !== 'invalid') {
       window.location.hash = viewMode;
     }
   }, [viewMode]);
+
+  if (viewMode === 'loading') {
+    return (
+      <div className="flex h-screen w-full bg-black items-center justify-center">
+        <div className="text-neutral-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'invalid') {
+    const isAdminPath = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
+    return (
+      <div className="flex h-screen w-full bg-black items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <h1 className="text-2xl font-bold text-white mb-4">
+            {isAdminPath ? 'Admin Access Unavailable' : 'Invalid Access Link'}
+          </h1>
+          <p className="text-neutral-400 mb-6">
+            {isAdminPath 
+              ? 'No admin user found in the database. Please ensure at least one user with role "COACH" exists. Check the browser console for more details.'
+              : 'The link you used is not valid. Please contact your administrator for a new access link.'}
+          </p>
+          <button
+            onClick={() => {
+              window.location.href = window.location.origin;
+            }}
+            className="px-6 py-2 bg-sequence-orange text-white rounded-lg hover:bg-orange-600 transition-colors"
+          >
+            Go Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (viewMode === 'select') {
     return (
@@ -29,45 +128,8 @@ function App() {
         <div className="max-w-md w-full space-y-4 sm:space-y-6 p-4 sm:p-6 md:p-8">
           <div className="text-center mb-6 sm:mb-8">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Sequence BioLab</h1>
-            <p className="text-sm sm:text-base text-neutral-400">Select your view</p>
-          </div>
-
-          <button
-            onClick={() => setViewMode('admin')}
-            className="w-full p-4 sm:p-5 md:p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white transition-all duration-300 shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 flex flex-col items-center gap-3 group touch-manipulation"
-          >
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Users className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="text-left w-full">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-1">Admin Panel</h2>
-              <p className="text-xs sm:text-sm text-blue-100">Manage sessions and communicate with users</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setViewMode('user')}
-            className="w-full p-4 sm:p-5 md:p-6 rounded-2xl bg-gradient-to-br from-sequence-orange to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white transition-all duration-300 shadow-lg shadow-orange-900/20 hover:shadow-orange-900/40 flex flex-col items-center gap-3 group touch-manipulation"
-          >
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="text-left w-full">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-1">Player 1 View</h2>
-              <p className="text-xs sm:text-sm text-orange-100">View sessions and communicate with admin</p>
-            </div>
-          </button>
-
-          <div className="pt-4 border-t border-neutral-800 text-center">
-            <button
-              onClick={() => {
-                setViewMode('select');
-                window.location.hash = '';
-              }}
-              className="text-xs sm:text-sm text-neutral-500 hover:text-neutral-300 transition-colors touch-manipulation py-2 px-4"
-            >
-              Switch view
-            </button>
+            <p className="text-sm sm:text-base text-neutral-400">Access via your unique link</p>
+            <p className="text-xs text-neutral-500 mt-2">Contact your administrator for access</p>
           </div>
         </div>
       </div>
@@ -76,8 +138,8 @@ function App() {
 
   return (
     <>
-      {viewMode === 'admin' && <AdminInterface />}
-      {viewMode === 'user' && <UserInterface />}
+      {viewMode === 'admin' && currentUser && <AdminInterface currentUser={currentUser} />}
+      {viewMode === 'user' && currentUser && <UserInterface currentUser={currentUser} />}
     </>
   );
 }

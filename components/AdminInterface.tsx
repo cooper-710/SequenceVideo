@@ -5,15 +5,13 @@ import { Session, Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
 import { Plus, Users, Video, ChevronDown, Film, Trash2, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
+import sequenceLogo from '../Sequence.png';
 
-const ADMIN_USER: User = {
-  id: 'admin',
-  name: 'Admin',
-  role: UserRole.COACH,
-  avatarUrl: ''
-};
+interface AdminInterfaceProps {
+  currentUser: User;
+}
 
-export const AdminInterface: React.FC = () => {
+export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
@@ -26,6 +24,8 @@ export const AdminInterface: React.FC = () => {
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null);
+  const [showDeletePlayerConfirm, setShowDeletePlayerConfirm] = useState<string | null>(null);
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
 
@@ -34,12 +34,12 @@ export const AdminInterface: React.FC = () => {
     loadSessions();
     loadAllMessages();
     loadPlayers();
-    // Poll for new sessions and messages
+    // Poll for new sessions and messages (less frequent now with real-time)
     const interval = setInterval(() => {
       loadSessions();
       loadAllMessages();
       loadPlayers();
-    }, 3000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -75,50 +75,53 @@ export const AdminInterface: React.FC = () => {
     };
   }, [activeSessionId]);
 
-  const loadSessions = () => {
+  const loadSessions = async () => {
     // Get sessions filtered by user-specific deletions
-    const allSessions = communicationService.getSessionsForUser(ADMIN_USER.id);
+    const allSessions = await communicationService.getSessionsForUser(currentUser.id);
     setSessions(allSessions);
   };
 
-  const loadAllMessages = () => {
+  const loadAllMessages = async () => {
     // Load messages from all sessions for thumbnail generation
-    const allSessions = communicationService.getSessions();
+    const allSessions = await communicationService.getSessions();
     const allMsgs: Message[] = [];
-    allSessions.forEach(session => {
-      const sessionMessages = communicationService.getMessages(session.id);
+    for (const session of allSessions) {
+      const sessionMessages = await communicationService.getMessages(session.id);
       allMsgs.push(...sessionMessages);
-    });
+    }
     setAllMessages(allMsgs);
   };
 
-  const loadMessages = (sessionId: string) => {
-    const sessionMessages = communicationService.getMessages(sessionId);
+  const loadMessages = async (sessionId: string) => {
+    const sessionMessages = await communicationService.getMessages(sessionId);
     setMessages(sessionMessages);
   };
 
-  const loadPlayers = () => {
-    const allPlayers = communicationService.getPlayers();
+  const loadPlayers = async () => {
+    const allPlayers = await communicationService.getPlayers();
     setPlayers(allPlayers);
   };
 
-  const handleCreateSession = () => {
+  const handleCreateSession = async () => {
     if (!newSessionTitle.trim() || !selectedPlayerId) return;
 
+    // Generate UUID v4
+    const sessionId = crypto.randomUUID();
     const newSession: Session = {
-      id: `s${Date.now()}`,
+      id: sessionId,
       title: newSessionTitle,
       date: new Date(),
       status: 'active',
-      coachId: ADMIN_USER.id,
+      coachId: currentUser.id,
       playerIds: [selectedPlayerId],
       tags: ['New Session']
     };
 
-    communicationService.createSession(newSession);
+    await communicationService.createSession(newSession);
     setNewSessionTitle('');
     setShowCreateSession(false);
     setActiveSessionId(newSession.id);
+    await loadSessions();
   };
 
   const handleCreatePlayer = () => {
@@ -141,36 +144,37 @@ export const AdminInterface: React.FC = () => {
   };
 
   const handlePlayerSelectionChange = (playerId: string | null) => {
-    // If clicking the same player, deselect. Otherwise, select the new player.
+    // If clicking the same player, just close the dropdown (don't deselect)
     if (selectedPlayerId === playerId) {
-      setSelectedPlayerId(null);
-    } else {
-      setSelectedPlayerId(playerId);
+      setPlayerDropdownOpen(false);
+      return;
     }
+    // Select the new player
+    setSelectedPlayerId(playerId);
     // Clear active session when player selection changes
     setActiveSessionId(null);
     setPlayerDropdownOpen(false);
   };
 
-  const handleSendMessage = (content: string, type: MessageType, metadata?: Message['metadata']) => {
+  const handleSendMessage = async (content: string, type: MessageType, metadata?: Message['metadata']) => {
     if (!activeSessionId) return;
 
     const newMessage: Message = {
-      id: `m${Date.now()}`,
+      id: crypto.randomUUID(),
       sessionId: activeSessionId,
-      senderId: ADMIN_USER.id,
+      senderId: currentUser.id,
       type,
       content,
       createdAt: new Date(),
       metadata,
     };
 
-    communicationService.sendMessage(activeSessionId, newMessage);
+    await communicationService.sendMessage(activeSessionId, newMessage);
   };
 
-  const handleUpdateMessage = (messageId: string, updates: Partial<Message>) => {
+  const handleUpdateMessage = async (messageId: string, updates: Partial<Message>) => {
     if (!activeSessionId) return;
-    communicationService.updateMessage(activeSessionId, messageId, updates);
+    await communicationService.updateMessage(activeSessionId, messageId, updates);
   };
 
   const handleSelectSession = (id: string) => {
@@ -180,7 +184,7 @@ export const AdminInterface: React.FC = () => {
 
   const handleDeleteSession = (sessionId: string) => {
     // Delete session only for the admin user (like iMessage)
-    communicationService.deleteSessionForUser(ADMIN_USER.id, sessionId);
+    communicationService.deleteSessionForUser(currentUser.id, sessionId);
     // Reload sessions to reflect deletion
     loadSessions();
     // If the deleted session was active, clear it
@@ -197,6 +201,28 @@ export const AdminInterface: React.FC = () => {
     } else {
       setShowDeleteConfirm(sessionId);
       setTimeout(() => setShowDeleteConfirm(null), 3000);
+    }
+  };
+
+  const handleDeletePlayer = async (playerId: string) => {
+    await communicationService.deletePlayer(playerId);
+    // If the deleted player was selected, clear the selection
+    if (selectedPlayerId === playerId) {
+      setSelectedPlayerId(null);
+      setActiveSessionId(null);
+    }
+    // Reload players to reflect deletion
+    await loadPlayers();
+    setShowDeletePlayerConfirm(null);
+  };
+
+  const handleDeletePlayerClick = (e: React.MouseEvent, playerId: string) => {
+    e.stopPropagation();
+    if (showDeletePlayerConfirm === playerId) {
+      handleDeletePlayer(playerId);
+    } else {
+      setShowDeletePlayerConfirm(playerId);
+      setTimeout(() => setShowDeletePlayerConfirm(null), 3000);
     }
   };
 
@@ -228,12 +254,13 @@ export const AdminInterface: React.FC = () => {
       <div className="h-14 sm:h-16 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-4 sticky top-0 z-30">
         {/* Left: Admin Panel Branding */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/20">
-            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-          </div>
+          <img 
+            src={sequenceLogo} 
+            alt="Sequence" 
+            className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
+          />
           <div className="hidden sm:block">
-            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">Admin Panel</h2>
-            <p className="text-[10px] text-neutral-400">Select player, then session</p>
+            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">Admin</h2>
           </div>
         </div>
 
@@ -423,35 +450,83 @@ export const AdminInterface: React.FC = () => {
                         ) : (
                           players.map((player) => {
                             const isSelected = selectedPlayerId === player.id;
+                            const isHovered = hoveredPlayerId === player.id;
+                            const isConfirmingDelete = showDeletePlayerConfirm === player.id;
                             return (
-                              <button
+                              <div
                                 key={player.id}
-                                onClick={() => handlePlayerSelectionChange(player.id)}
-                                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 ${
-                                  isSelected
-                                    ? 'bg-blue-500/10 border-blue-500/50 hover:bg-blue-500/15'
-                                    : 'bg-neutral-900/50 border-neutral-700 hover:bg-neutral-800/50 hover:border-neutral-600'
-                                }`}
+                                onMouseEnter={() => setHoveredPlayerId(player.id)}
+                                onMouseLeave={() => {
+                                  setHoveredPlayerId(null);
+                                  if (!isConfirmingDelete) {
+                                    setShowDeletePlayerConfirm(null);
+                                  }
+                                }}
+                                className="relative group"
                               >
-                                <div className="relative flex-shrink-0">
-                                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500/80 to-blue-600/80 border-2 border-neutral-700 flex items-center justify-center text-white text-xs sm:text-sm font-bold">
-                                    {player.name.charAt(0).toUpperCase()}
-                                  </div>
-                                  {isSelected && (
-                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-blue-500 border-2 border-neutral-900 flex items-center justify-center">
-                                      <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                                <button
+                                  onClick={() => handlePlayerSelectionChange(player.id)}
+                                  className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 relative ${
+                                    isSelected
+                                      ? 'bg-blue-500/10 border-blue-500/50 hover:bg-blue-500/15'
+                                      : 'bg-neutral-900/50 border-neutral-700 hover:bg-neutral-800/50 hover:border-neutral-600'
+                                  } ${isConfirmingDelete ? 'ring-2 ring-red-500/50' : ''}`}
+                                >
+                                  <div className="relative flex-shrink-0">
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500/80 to-blue-600/80 border-2 border-neutral-700 flex items-center justify-center text-white text-xs sm:text-sm font-bold">
+                                      {player.name.charAt(0).toUpperCase()}
                                     </div>
+                                    {isSelected && (
+                                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-blue-500 border-2 border-neutral-900 flex items-center justify-center">
+                                        <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 text-left min-w-0">
+                                    <div className="text-xs sm:text-sm font-medium text-white truncate">
+                                      {player.name}
+                                    </div>
+                                    <div className="text-[10px] sm:text-xs text-neutral-500 truncate">
+                                      {player.role}
+                                    </div>
+                                  </div>
+                                </button>
+
+                                {/* Delete Button */}
+                                <div className={`absolute right-2 top-1/2 -translate-y-1/2 transition-all duration-200 ${
+                                  isHovered || isConfirmingDelete ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
+                                }`}>
+                                  {isConfirmingDelete ? (
+                                    <div className="flex items-center gap-1 bg-red-500/20 border border-red-500/50 rounded-lg px-2 py-1">
+                                      <button
+                                        onClick={(e) => handleDeletePlayerClick(e, player.id)}
+                                        className="p-1 hover:bg-red-500/30 rounded transition-colors"
+                                        title="Confirm delete"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShowDeletePlayerConfirm(null);
+                                        }}
+                                        className="p-1 hover:bg-neutral-700/50 rounded transition-colors"
+                                        title="Cancel"
+                                      >
+                                        <X className="w-3.5 h-3.5 text-neutral-400" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => handleDeletePlayerClick(e, player.id)}
+                                      className="p-1.5 rounded-lg bg-neutral-800/90 hover:bg-red-500/20 border border-neutral-700 hover:border-red-500/50 transition-all"
+                                      title="Delete player"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-neutral-400 group-hover:text-red-400 transition-colors" />
+                                    </button>
                                   )}
                                 </div>
-                                <div className="flex-1 text-left min-w-0">
-                                  <div className="text-xs sm:text-sm font-medium text-white truncate">
-                                    {player.name}
-                                  </div>
-                                  <div className="text-[10px] sm:text-xs text-neutral-500 truncate">
-                                    {player.role}
-                                  </div>
-                                </div>
-                              </button>
+                              </div>
                             );
                           })
                         )}
@@ -566,14 +641,14 @@ export const AdminInterface: React.FC = () => {
           <>
             <SessionHeader 
               session={activeSession} 
-              coach={ADMIN_USER}
+              coach={currentUser}
               onBackMobile={() => setActiveSessionId(null)}
             />
             <div className="flex-1 overflow-hidden relative">
               {/* Chat Interface */}
               <ChatInterface 
                 messages={activeMessages}
-                currentUser={ADMIN_USER}
+                currentUser={currentUser}
                 onSendMessage={handleSendMessage}
                 onUpdateMessage={handleUpdateMessage}
                 otherUserName={selectedPlayerId
