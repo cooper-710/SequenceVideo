@@ -36,10 +36,20 @@ class CommunicationService {
         },
         (payload) => {
           // Notify listeners for the affected session
+          let sessionId: string | null = null;
+          
+          // Handle INSERT and UPDATE (payload.new exists)
           if (payload.new && 'session_id' in payload.new) {
-            const sessionId = payload.new.session_id as string;
+            sessionId = payload.new.session_id as string;
+          }
+          // Handle DELETE (payload.old exists)
+          else if (payload.old && 'session_id' in payload.old) {
+            sessionId = payload.old.session_id as string;
+          }
+          
+          if (sessionId) {
             this.loadMessages(sessionId).then(messages => {
-              this.notifyListeners(sessionId, messages);
+              this.notifyListeners(sessionId!, messages);
             });
           }
         }
@@ -178,14 +188,39 @@ class CommunicationService {
     const allSessions = await this.getSessions();
     const deletedSessionIds = await this.getDeletedSessionsForUser(userId);
     
+    // Check if user is an admin/coach
+    const isAdmin = await this.isUserAdmin(userId);
+    
     return allSessions.filter(session => {
       // Include if user is coach, player in session, or admin
       const isCoach = session.coachId === userId;
       const isPlayer = session.playerIds.includes(userId);
+      // Admins can see sessions with no coach assigned (waiting for coach)
+      const isUnassignedSession = isAdmin && (!session.coachId || session.coachId === '');
       const isDeleted = deletedSessionIds.has(session.id);
       
-      return (isCoach || isPlayer) && !isDeleted;
+      return (isCoach || isPlayer || isUnassignedSession) && !isDeleted;
     });
+  }
+
+  private async isUserAdmin(userId: string): Promise<boolean> {
+    if (!isSupabaseConfigured()) {
+      return false;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data) return false;
+      return data.role === UserRole.COACH;
+    } catch (error) {
+      console.error('Error checking if user is admin:', error);
+      return false;
+    }
   }
 
   async deleteSessionForUser(userId: string, sessionId: string): Promise<void> {

@@ -70,9 +70,11 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     };
   }, [currentUser]);
 
-  // Clear active session when player selection changes (new flow: player first)
+  // Clear active session when player is explicitly deselected
   useEffect(() => {
-    if (!selectedPlayerId) {
+    // Only clear if player was explicitly set to null (deselected)
+    // This won't interfere with auto-selecting a player when opening a session
+    if (!selectedPlayerId && activeSessionId) {
       setActiveSessionId(null);
     }
   }, [selectedPlayerId]);
@@ -200,7 +202,19 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     await communicationService.updateMessage(activeSessionId, messageId, updates);
   };
 
-  const handleSelectSession = (id: string) => {
+  const handleSelectSession = async (id: string) => {
+    // If session has no coach assigned, assign current admin as coach
+    const session = sessions.find(s => s.id === id);
+    if (session) {
+      if (!session.coachId || session.coachId === '') {
+        await communicationService.updateSession(id, { coachId: currentUser.id });
+      }
+      // Auto-select the player from this session if not already selected
+      if (session.playerIds && session.playerIds.length > 0 && !selectedPlayerId) {
+        setSelectedPlayerId(session.playerIds[0]);
+      }
+    }
+    
     setActiveSessionId(id);
     setSessionDropdownOpen(false);
   };
@@ -263,13 +277,19 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     return videoMessage.metadata?.thumbnailUrl || null;
   };
 
-  // Filter sessions by selected player
+  // Filter sessions by selected player, but also show unassigned sessions (no coach)
   const filteredSessions = selectedPlayerId
-    ? sessions.filter(session => 
-        session.playerIds && 
-        session.playerIds.includes(selectedPlayerId)
-      )
-    : [];
+    ? sessions.filter(session => {
+        // Show if session is for selected player OR if session has no coach assigned
+        const isForSelectedPlayer = session.playerIds && session.playerIds.includes(selectedPlayerId);
+        const isUnassigned = !session.coachId || session.coachId === '';
+        return isForSelectedPlayer || isUnassigned;
+      })
+    : sessions.filter(session => {
+        // If no player selected, show all sessions or unassigned ones
+        const isUnassigned = !session.coachId || session.coachId === '';
+        return isUnassigned;
+      });
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
@@ -294,8 +314,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
 
         {/* Center/Right: Session Selector, Player Selector & Create Button */}
         <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end">
-          {/* Session Dropdown - Only show if a player is selected */}
-          {selectedPlayerId && (
+          {/* Session Dropdown - Show if a player is selected OR if there are unassigned sessions */}
+          {(selectedPlayerId || filteredSessions.length > 0) && (
             <div className="relative">
               <button
                 onClick={() => setSessionDropdownOpen(!sessionDropdownOpen)}
