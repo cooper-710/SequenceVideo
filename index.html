@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+    <title>Sequence BioLab Video</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              sequence: {
+                black: '#000000',
+                dark: '#121212',
+                card: '#1E1E1E',
+                hover: '#2C2C2C',
+                orange: '#F97316',
+                orangeHover: '#ea580c',
+                text: '#E5E5E5',
+                muted: '#A3A3A3',
+                border: '#333333'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      * {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+      }
+      
+      body {
+        background-color: #000000;
+        color: #E5E5E5;
+        overscroll-behavior: none;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        /* Safe area insets for iOS */
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      
+      /* Custom scrollbar for dark theme */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #121212; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #333; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #444; 
+      }
+      
+      /* Better touch targets on mobile */
+      @media (max-width: 640px) {
+        button, a, input, textarea, select {
+          min-height: 44px;
+        }
+      }
+      
+      /* Prevent text selection on UI elements */
+      button, .select-none {
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      /* Smooth scrolling */
+      html {
+        scroll-behavior: smooth;
+      }
+      
+      /* Safe area bottom spacing */
+      .safe-area-inset-bottom {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      /* Responsive text sizing */
+      @media (max-width: 375px) {
+        html {
+          font-size: 14px;
+        }
+      }
+      
+      @media (min-width: 376px) and (max-width: 768px) {
+        html {
+          font-size: 15px;
+        }
+      }
+      
+      @media (min-width: 769px) {
+        html {
+          font-size: 16px;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

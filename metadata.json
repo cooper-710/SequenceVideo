@@ -1,0 +1,8 @@
+{
+  "name": "Sequence BioLab - Video Module",
+  "description": "Athlete-Coach video communication and feedback module.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
