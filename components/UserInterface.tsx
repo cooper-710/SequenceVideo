@@ -174,7 +174,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       status: 'active',
       coachId: '', // Will be assigned to admin when they join
       playerIds: [currentUser.id],
-      tags: ['New Session']
+      tags: []
     };
 
     await communicationService.createSession(newSession);
@@ -314,14 +314,6 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
                                 </h3>
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                   <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-wide">{format(session.date, 'MMM d')}</span>
-                                  <span className="w-0.5 h-0.5 rounded-full bg-neutral-600" />
-                                  <span className={`text-[9px] px-1.5 py-px rounded-md border ${
-                                    isActive 
-                                      ? 'bg-sequence-orange/10 border-sequence-orange/20 text-sequence-orange' 
-                                      : 'bg-neutral-800 border-neutral-700 text-neutral-400'
-                                  }`}>
-                                    {session.tags[0]}
-                                  </span>
                                 </div>
                               </div>
                             </div>
