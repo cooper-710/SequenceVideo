@@ -43,12 +43,8 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       );
       setSessions(userSessions);
       
-      // Auto-select first session if none selected
+      // Clear active session if it was deleted (but don't auto-select a new one)
       const currentActiveId = activeSessionIdRef.current;
-      if (!currentActiveId && userSessions.length > 0) {
-        setActiveSessionId(userSessions[0].id);
-      }
-      // Clear active session if it was deleted
       if (currentActiveId && !userSessions.find(s => s.id === currentActiveId)) {
         setActiveSessionId(null);
       }
@@ -384,7 +380,6 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
               <div className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center group-hover:bg-sequence-orange group-hover:text-white transition-colors">
                 <Plus className="w-3 h-3" />
               </div>
-              <span className="hidden sm:inline">New Session</span>
             </button>
           ) : (
             <div className="flex items-center gap-2">
