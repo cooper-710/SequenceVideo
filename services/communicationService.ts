@@ -384,18 +384,29 @@ class CommunicationService {
 
   async deletePlayer(playerId: string): Promise<void> {
     if (!isSupabaseConfigured()) {
+      console.error('Cannot delete player: Supabase is not configured');
       return;
     }
 
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('users')
         .delete()
-        .eq('id', playerId);
+        .eq('id', playerId)
+        .eq('role', UserRole.PLAYER) // Only allow deleting players, not admins
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting player:', error);
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.warn(`Player with ID ${playerId} not found or could not be deleted`);
+      }
     } catch (error) {
       console.error('Error deleting player:', error);
+      throw error; // Re-throw so the UI can handle it
     }
   }
 

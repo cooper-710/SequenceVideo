@@ -3,6 +3,7 @@ import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
 import { Session, Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
+import { createUserWithToken } from '../services/authService';
 import { Plus, Users, Video, ChevronDown, Film, Trash2, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import sequenceLogo from '../Sequence.png';
@@ -124,23 +125,23 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     await loadSessions();
   };
 
-  const handleCreatePlayer = () => {
+  const handleCreatePlayer = async () => {
     if (!newPlayerName.trim()) return;
 
-    const newPlayer: User = {
-      id: `player${Date.now()}`,
-      name: newPlayerName.trim(),
-      role: UserRole.PLAYER,
-      avatarUrl: ''
-    };
-
-    communicationService.addPlayer(newPlayer);
-    setNewPlayerName('');
-    setShowCreatePlayer(false);
-    loadPlayers();
-    // Select the newly created player
-    setSelectedPlayerId(newPlayer.id);
-    setPlayerDropdownOpen(false);
+    // Create player using authService
+    const result = await createUserWithToken(newPlayerName.trim(), UserRole.PLAYER);
+    
+    if (result && result.user) {
+      setNewPlayerName('');
+      setShowCreatePlayer(false);
+      await loadPlayers();
+      // Select the newly created player
+      setSelectedPlayerId(result.user.id);
+      setPlayerDropdownOpen(false);
+    } else {
+      console.error('Failed to create player');
+      // Optionally show an error message to the user
+    }
   };
 
   const handlePlayerSelectionChange = (playerId: string | null) => {
@@ -205,15 +206,21 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   };
 
   const handleDeletePlayer = async (playerId: string) => {
-    await communicationService.deletePlayer(playerId);
-    // If the deleted player was selected, clear the selection
-    if (selectedPlayerId === playerId) {
-      setSelectedPlayerId(null);
-      setActiveSessionId(null);
+    try {
+      await communicationService.deletePlayer(playerId);
+      // If the deleted player was selected, clear the selection
+      if (selectedPlayerId === playerId) {
+        setSelectedPlayerId(null);
+        setActiveSessionId(null);
+      }
+      // Reload players to reflect deletion
+      await loadPlayers();
+      setShowDeletePlayerConfirm(null);
+    } catch (error) {
+      console.error('Failed to delete player:', error);
+      // Keep the confirmation state so user can try again
+      alert('Failed to delete player. Please check the console for details.');
     }
-    // Reload players to reflect deletion
-    await loadPlayers();
-    setShowDeletePlayerConfirm(null);
   };
 
   const handleDeletePlayerClick = (e: React.MouseEvent, playerId: string) => {

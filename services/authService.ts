@@ -61,18 +61,24 @@ export const getPlayerByName = async (playerName: string): Promise<User | null> 
       .select('*')
       .eq('name', decodedName)
       .eq('role', UserRole.PLAYER)
-      .single();
+      .limit(1);
 
-    if (error || !data) {
+    if (error) {
+      console.error('Error querying player by name:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
       console.warn(`Player "${decodedName}" not found in database`);
       return null;
     }
 
+    const player = data[0];
     return {
-      id: data.id,
-      name: data.name,
-      role: data.role as UserRole,
-      avatarUrl: data.avatar_url || ''
+      id: player.id,
+      name: player.name,
+      role: player.role as UserRole,
+      avatarUrl: player.avatar_url || ''
     };
   } catch (error) {
     console.error('Error getting player by name:', error);
