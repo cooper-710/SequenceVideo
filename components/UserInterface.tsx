@@ -43,7 +43,8 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       );
       setSessions(userSessions);
       
-      // Clear active session if it was deleted (but don't auto-select a new one)
+      // Never auto-select - user must manually choose a session
+      // Only clear active session if it was deleted
       const currentActiveId = activeSessionIdRef.current;
       if (currentActiveId && !userSessions.find(s => s.id === currentActiveId)) {
         setActiveSessionId(null);
