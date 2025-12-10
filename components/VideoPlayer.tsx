@@ -419,6 +419,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     };
   }, [isAnnotating, isFullscreen, currentDrawings, activeAnnotations, currentTime, anglePoints, currentPoint, showAnnotations]);
 
+  // Helper functions to normalize/denormalize coordinates based on video natural dimensions
+  // This ensures drawings stay locked in place when screen size changes
+  const normalizePoint = (point: Point): Point => {
+    if (!videoRef.current || videoSize.width === 0 || videoSize.height === 0) {
+      return point; // Fallback if video dimensions not available
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) return point;
+    const rect = canvas.getBoundingClientRect();
+    // Normalize based on current canvas display size
+    return {
+      x: point.x / rect.width,
+      y: point.y / rect.height
+    };
+  };
+
+  const denormalizePoint = (normalizedPoint: Point): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) return normalizedPoint;
+    const rect = canvas.getBoundingClientRect();
+    // Denormalize based on current canvas display size
+    return {
+      x: normalizedPoint.x * rect.width,
+      y: normalizedPoint.y * rect.height
+    };
+  };
+
+  const normalizeDrawing = (drawing: Drawing): Drawing => {
+    const normalized: Drawing = {
+      ...drawing,
+      points: drawing.points.map(p => normalizePoint(p)),
+      start: drawing.start ? normalizePoint(drawing.start) : undefined,
+      end: drawing.end ? normalizePoint(drawing.end) : undefined
+    };
+    return normalized;
+  };
+
+  const denormalizeDrawing = (drawing: Drawing): Drawing => {
+    const denormalized: Drawing = {
+      ...drawing,
+      points: drawing.points.map(p => denormalizePoint(p)),
+      start: drawing.start ? denormalizePoint(drawing.start) : undefined,
+      end: drawing.end ? denormalizePoint(drawing.end) : undefined
+    };
+    return denormalized;
+  };
+
   // Redraw Canvas Logic
   const redrawCanvas = () => {
     const canvas = canvasRef.current;
@@ -435,14 +482,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (!isAnnotating && showAnnotations) {
       activeAnnotations.forEach(annotation => {
         if (annotation.drawings) {
-          annotation.drawings.forEach(d => drawShape(ctx, d));
+          annotation.drawings.forEach(d => {
+            // Denormalize coordinates before drawing
+            const denormalized = denormalizeDrawing(d);
+            drawShape(ctx, denormalized);
+          });
         }
       });
     }
 
     // 2. Draw current session drawings (edit mode)
     if (isAnnotating) {
-      currentDrawings.forEach(d => drawShape(ctx, d));
+      currentDrawings.forEach(d => {
+        // Denormalize coordinates before drawing
+        const denormalized = denormalizeDrawing(d);
+        drawShape(ctx, denormalized);
+      });
 
       // 3. Draw shape in progress (Drag to draw tools)
       if (isDrawing && startPoint && currentPoint && activeTool !== 'angle') {
@@ -667,9 +722,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (!isAnnotating) return;
     
     const point = getCanvasPoint(e);
+    const normalizedPoint = normalizePoint(point);
 
     if (activeTool === 'angle') {
-       const newPoints = [...anglePoints, point];
+       const newPoints = [...anglePoints, point]; // Keep canvas coords for preview
        setAnglePoints(newPoints);
        
        if (newPoints.length === 3) {
@@ -684,11 +740,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           
           const angleDeg = Math.abs(diff * 180 / Math.PI);
           
+          // Normalize points before saving
+          const normalizedPoints = newPoints.map(p => normalizePoint(p));
           const newAngle: Drawing = {
              id: Date.now().toString(),
              tool: 'angle',
              color: selectedColor,
-             points: newPoints,
+             points: normalizedPoints,
              timestamp: currentTime,
              text: `${angleDeg.toFixed(1)}°`
           };
@@ -701,14 +759,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
 
     setIsDrawing(true);
-    setStartPoint(point);
+    setStartPoint(point); // Keep canvas coords for preview
     setCurrentPoint(point);
     
     if (activeTool === 'pen') {
        setCurrentDrawings(prev => [...prev, {
          id: Date.now().toString(),
          tool: 'pen',
-         points: [point],
+         points: [normalizedPoint], // Store normalized coordinates
          color: selectedColor,
          timestamp: currentTime
        }]);
@@ -730,17 +788,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (!isDrawing) return;
 
     if (activeTool === 'pen') {
+      const normalizedPoint = normalizePoint(point);
       setCurrentDrawings(prev => {
         const last = prev[prev.length - 1];
         if (!last || last.tool !== 'pen') return prev;
-        // Optimization: only add point if distance is significant
+        // Optimization: only add point if distance is significant (check in normalized space)
         const lastPoint = last.points[last.points.length - 1];
-        const dist = Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y);
-        if (dist < 2) return prev;
+        const dist = Math.hypot(normalizedPoint.x - lastPoint.x, normalizedPoint.y - lastPoint.y);
+        // Use a small threshold in normalized space (approximately 2 pixels / canvas width)
+        const canvas = canvasRef.current;
+        const threshold = canvas ? 2 / canvas.getBoundingClientRect().width : 0.001;
+        if (dist < threshold) return prev;
 
         return [
           ...prev.slice(0, -1),
-          { ...last, points: [...last.points, point] }
+          { ...last, points: [...last.points, normalizedPoint] }
         ];
       });
     }
@@ -760,11 +822,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         saveToHistory([...currentDrawings]);
       }
     } else if (startPoint && currentPoint) {
+      // Normalize coordinates before saving
+      const normalizedStart = normalizePoint(startPoint);
+      const normalizedEnd = normalizePoint(currentPoint);
       const newShape: Drawing = {
         id: Date.now().toString(),
         tool: activeTool,
-        start: startPoint,
-        end: currentPoint,
+        start: normalizedStart,
+        end: normalizedEnd,
         color: selectedColor,
         points: [],
         timestamp: currentTime
