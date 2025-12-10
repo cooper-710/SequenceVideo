@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
 import { Session, Message, MessageType, User, UserRole } from '../types';
@@ -44,6 +44,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   const [showDeletePlayerConfirm, setShowDeletePlayerConfirm] = useState<string | null>(null);
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
+  // Track if player selection was manual (user-initiated) to prevent auto-switching
+  const isManualPlayerSelection = useRef(false);
 
   // Load sessions, messages, and players on mount
   useEffect(() => {
@@ -56,6 +58,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     // Subscribe to real-time sessions updates
     const unsubscribeSessions = communicationService.subscribeToSessions((newSessions) => {
       setSessions(newSessions);
+      // When sessions update, don't auto-select a player if one was manually selected
+      // This prevents the selected player from switching when sessions refresh
     });
 
     // Poll for players and messages (less frequent now with real-time sessions)
@@ -76,6 +80,13 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     // This won't interfere with auto-selecting a player when opening a session
     if (!selectedPlayerId && activeSessionId) {
       setActiveSessionId(null);
+    }
+  }, [selectedPlayerId]);
+
+  // Reset manual selection flag when player is cleared (allows auto-selection again)
+  useEffect(() => {
+    if (!selectedPlayerId) {
+      isManualPlayerSelection.current = false;
     }
   }, [selectedPlayerId]);
 
@@ -159,7 +170,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       setNewPlayerName('');
       setShowCreatePlayer(false);
       await loadPlayers();
-      // Select the newly created player
+      // Select the newly created player and mark as manual selection
+      isManualPlayerSelection.current = true;
       setSelectedPlayerId(result.user.id);
       setPlayerDropdownOpen(false);
     } else {
@@ -174,6 +186,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       setPlayerDropdownOpen(false);
       return;
     }
+    // Mark this as a manual selection
+    isManualPlayerSelection.current = true;
     // Select the new player
     setSelectedPlayerId(playerId);
     // Clear active session when player selection changes
@@ -209,8 +223,10 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       if (!session.coachId || session.coachId === '') {
         await communicationService.updateSession(id, { coachId: currentUser.id });
       }
-      // Auto-select the player from this session if not already selected
-      if (session.playerIds && session.playerIds.length > 0 && !selectedPlayerId) {
+      // Auto-select the player from this session only if:
+      // 1. No player is currently selected AND
+      // 2. No manual selection has been made (to prevent overriding user choice)
+      if (session.playerIds && session.playerIds.length > 0 && !selectedPlayerId && !isManualPlayerSelection.current) {
         setSelectedPlayerId(session.playerIds[0]);
       }
     }
@@ -219,21 +235,26 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     setSessionDropdownOpen(false);
   };
 
-  const handleDeleteSession = (sessionId: string) => {
+  const handleDeleteSession = async (sessionId: string) => {
     // Delete session only for the admin user (like iMessage)
-    communicationService.deleteSessionForUser(currentUser.id, sessionId);
-    // Sessions will update automatically via real-time subscription
-    // If the deleted session was active, clear it
-    if (activeSessionId === sessionId) {
-      setActiveSessionId(null);
+    try {
+      await communicationService.deleteSessionForUser(currentUser.id, sessionId);
+      // Sessions will update automatically via real-time subscription
+      // If the deleted session was active, clear it
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(null);
+      }
+      setShowDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Failed to delete session. Please try again.');
     }
-    setShowDeleteConfirm(null);
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, sessionId: string) => {
+  const handleDeleteClick = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     if (showDeleteConfirm === sessionId) {
-      handleDeleteSession(sessionId);
+      await handleDeleteSession(sessionId);
     } else {
       setShowDeleteConfirm(sessionId);
       setTimeout(() => setShowDeleteConfirm(null), 3000);

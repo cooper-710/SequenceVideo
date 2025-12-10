@@ -225,20 +225,27 @@ class CommunicationService {
 
   async deleteSessionForUser(userId: string, sessionId: string): Promise<void> {
     if (!isSupabaseConfigured()) {
-      return;
+      throw new Error('Supabase is not configured');
     }
 
     try {
+      // Use upsert to handle duplicate deletions gracefully (idempotent operation)
       const { error } = await supabase
         .from('user_session_deletions')
-        .insert({
+        .upsert({
           user_id: userId,
           session_id: sessionId
+        }, {
+          onConflict: 'user_id,session_id'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting session for user:', error);
+        throw error;
+      }
     } catch (error) {
       console.error('Error deleting session for user:', error);
+      throw error; // Re-throw so calling code can handle it
     }
   }
 

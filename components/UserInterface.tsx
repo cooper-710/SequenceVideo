@@ -134,20 +134,25 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const handleDeleteSession = async (sessionId: string) => {
     // Delete session only for current user (like iMessage)
     if (currentUser) {
-      await communicationService.deleteSessionForUser(currentUser.id, sessionId);
-      // Sessions will update automatically via real-time subscription
-      // If the deleted session was active, clear it
-      if (activeSessionId === sessionId) {
-        setActiveSessionId(null);
+      try {
+        await communicationService.deleteSessionForUser(currentUser.id, sessionId);
+        // Sessions will update automatically via real-time subscription
+        // If the deleted session was active, clear it
+        if (activeSessionId === sessionId) {
+          setActiveSessionId(null);
+        }
+        setShowDeleteConfirm(null);
+      } catch (error) {
+        console.error('Error deleting session:', error);
+        alert('Failed to delete session. Please try again.');
       }
-      setShowDeleteConfirm(null);
     }
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, sessionId: string) => {
+  const handleDeleteClick = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     if (showDeleteConfirm === sessionId) {
-      handleDeleteSession(sessionId);
+      await handleDeleteSession(sessionId);
     } else {
       setShowDeleteConfirm(sessionId);
       setTimeout(() => setShowDeleteConfirm(null), 3000);
