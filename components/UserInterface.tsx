@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
 import { Session, Message, MessageType, User, UserRole } from '../types';
@@ -12,10 +12,7 @@ interface UserInterfaceProps {
 }
 
 export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => {
-  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
-  const activeSessionIdRef = useRef<string | null>(null);
-  const manuallySelectedSessionRef = useRef<string | null>(null); // Track manually selected session
-  const allowSessionChangeRef = useRef<boolean>(false); // Only true when button is clicked
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -25,26 +22,9 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-  // Wrapper for setActiveSessionId that ONLY allows changes from handleSelectSession
-  const setActiveSessionId = (id: string | null, allow: boolean = false) => {
-    if (!allow && !allowSessionChangeRef.current) {
-      console.warn('BLOCKED: Attempted to change activeSessionId without permission', id);
-      return; // BLOCK any unauthorized changes
-    }
-    allowSessionChangeRef.current = false; // Reset the flag
-    setActiveSessionIdState(id);
-  };
-
-  // Keep ref in sync with state  
-  useEffect(() => {
-    activeSessionIdRef.current = activeSessionId;
-  }, [activeSessionId]);
-
   // Load sessions on mount
   useEffect(() => {
-    // Set current user ID for filtered sessions
     communicationService.setCurrentUserId(currentUser.id);
-    
     loadAllMessages();
     
     // Subscribe to real-time sessions updates
@@ -54,49 +34,24 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
       
-      // Get current active session ID - prioritize manually selected session
-      const currentActiveId = manuallySelectedSessionRef.current || activeSessionIdRef.current;
+      setSessions(userSessions);
       
-      // ABSOLUTELY DO NOT modify activeSessionId here - only handleSelectSession can change it
-      // Ensure active session is in the sessions array so activeSession can find it
-      let sessionsToSet = [...userSessions];
-      if (currentActiveId) {
-        const activeSessionInFiltered = userSessions.find(s => s.id === currentActiveId);
-        const activeSessionInOriginal = newSessions.find(s => s.id === currentActiveId);
-        
-        // If active session exists in original but not in filtered, include it anyway
-        if (!activeSessionInFiltered && activeSessionInOriginal) {
-          sessionsToSet.push(activeSessionInOriginal);
-        }
-        
-        // CRITICAL: Reorder so manually selected session is FIRST
-        // This prevents UI from showing most recent session when sessions update
-        const activeIndex = sessionsToSet.findIndex(s => s.id === currentActiveId);
-        if (activeIndex > 0) {
-          const activeSession = sessionsToSet[activeIndex];
-          sessionsToSet.splice(activeIndex, 1);
-          sessionsToSet.unshift(activeSession);
-        } else if (activeIndex === -1 && activeSessionInOriginal) {
-          // If not found but exists in original, add it at the beginning
-          sessionsToSet.unshift(activeSessionInOriginal);
-        }
+      // If active session no longer exists, clear it
+      if (activeSessionId && !userSessions.find(s => s.id === activeSessionId)) {
+        setActiveSessionId(null);
       }
-      
-      setSessions(sessionsToSet);
-      
-      // DO NOT touch activeSessionId here - absolutely forbidden
     });
 
-    // Poll for messages (less frequent now with real-time sessions)
+    // Poll for messages
     const interval = setInterval(() => {
       loadAllMessages();
-    }, 10000); // Increased interval since sessions are now real-time
+    }, 10000);
     
     return () => {
       unsubscribeSessions();
       clearInterval(interval);
     };
-  }, [currentUser]);
+  }, [currentUser, activeSessionId]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -163,24 +118,17 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   };
 
   const handleSelectSession = (id: string) => {
-    // Mark this as a manual selection - prevent any auto-switching
-    manuallySelectedSessionRef.current = id;
-    allowSessionChangeRef.current = true; // Allow this change
-    setActiveSessionId(id, true);
+    setActiveSessionId(id);
     setSessionDropdownOpen(false);
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    // Delete session only for current user (like iMessage)
     if (currentUser) {
       try {
         await communicationService.deleteSessionForUser(currentUser.id, sessionId);
-        // Sessions will update automatically via real-time subscription
         // If the deleted session was active, clear it
         if (activeSessionId === sessionId) {
-          manuallySelectedSessionRef.current = null;
-          allowSessionChangeRef.current = true; // Allow this change
-          setActiveSessionId(null, true);
+          setActiveSessionId(null);
         }
         setShowDeleteConfirm(null);
       } catch (error) {
@@ -218,7 +166,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       title: newSessionTitle,
       date: new Date(),
       status: 'active',
-      coachId: '', // Will be assigned to admin when they join
+      coachId: '',
       playerIds: [currentUser.id],
       tags: []
     };
@@ -226,16 +174,13 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     await communicationService.createSession(newSession);
     setNewSessionTitle('');
     setShowCreateSession(false);
-    // DO NOT auto-select new session - user must manually select it via button
-    // Sessions will update automatically via real-time subscription
   };
 
-  // CRITICAL: Use useMemo to ensure activeSession is stable and doesn't change unexpectedly
-  // Only recompute when activeSessionId or sessions actually change
   const activeSession = useMemo(() => {
     if (!activeSessionId || !sessions.length) return undefined;
     return sessions.find(s => s.id === activeSessionId);
   }, [activeSessionId, sessions]);
+  
   const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
 
   // Get coach user for header (first admin/coach found in messages, or default)
@@ -469,10 +414,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
             <SessionHeader 
               session={activeSession} 
               coach={getCoachUser()}
-              onBackMobile={() => {
-                allowSessionChangeRef.current = true; // Allow this change
-                setActiveSessionId(null, true);
-              }}
+              onBackMobile={() => setActiveSessionId(null)}
             />
             <div className="flex-1 overflow-hidden relative">
               <ChatInterface 

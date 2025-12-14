@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
 import { Session, Message, MessageType, User, UserRole } from '../types';
@@ -16,13 +16,10 @@ interface AdminInterfaceProps {
 const getInitials = (name: string): string => {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
-    // Multiple words: first letter of first word + first letter of last word
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   } else if (parts.length === 1 && parts[0].length >= 2) {
-    // Single word with 2+ characters: first two letters
     return parts[0].substring(0, 2).toUpperCase();
   } else {
-    // Single character: just that character
     return parts[0].charAt(0).toUpperCase();
   }
 };
@@ -44,51 +41,41 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   const [showDeletePlayerConfirm, setShowDeletePlayerConfirm] = useState<string | null>(null);
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  // Track if player selection was manual (user-initiated) to prevent auto-switching
-  const isManualPlayerSelection = useRef(false);
 
   // Load sessions, messages, and players on mount
   useEffect(() => {
-    // Set current user ID for filtered sessions
     communicationService.setCurrentUserId(currentUser.id);
-    
     loadAllMessages();
     loadPlayers();
     
     // Subscribe to real-time sessions updates
     const unsubscribeSessions = communicationService.subscribeToSessions((newSessions) => {
       setSessions(newSessions);
-      // When sessions update, don't auto-select a player if one was manually selected
-      // This prevents the selected player from switching when sessions refresh
+      
+      // If active session no longer exists, clear it
+      if (activeSessionId && !newSessions.find(s => s.id === activeSessionId)) {
+        setActiveSessionId(null);
+      }
     });
 
-    // Poll for players and messages (less frequent now with real-time sessions)
+    // Poll for players and messages
     const interval = setInterval(() => {
       loadAllMessages();
       loadPlayers();
-    }, 10000); // Increased interval since sessions are now real-time
+    }, 10000);
     
     return () => {
       unsubscribeSessions();
       clearInterval(interval);
     };
-  }, [currentUser]);
+  }, [currentUser, activeSessionId]);
 
-  // Clear active session when player is explicitly deselected
+  // Clear active session when player is deselected
   useEffect(() => {
-    // Only clear if player was explicitly set to null (deselected)
-    // This won't interfere with auto-selecting a player when opening a session
     if (!selectedPlayerId && activeSessionId) {
       setActiveSessionId(null);
     }
-  }, [selectedPlayerId]);
-
-  // Reset manual selection flag when player is cleared (allows auto-selection again)
-  useEffect(() => {
-    if (!selectedPlayerId) {
-      isManualPlayerSelection.current = false;
-    }
-  }, [selectedPlayerId]);
+  }, [selectedPlayerId, activeSessionId]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -163,15 +150,12 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   const handleCreatePlayer = async () => {
     if (!newPlayerName.trim()) return;
 
-    // Create player using authService
     const result = await createUserWithToken(newPlayerName.trim(), UserRole.PLAYER);
     
     if (result && result.user) {
       setNewPlayerName('');
       setShowCreatePlayer(false);
       await loadPlayers();
-      // Select the newly created player and mark as manual selection
-      isManualPlayerSelection.current = true;
       setSelectedPlayerId(result.user.id);
       setPlayerDropdownOpen(false);
     } else {
@@ -181,16 +165,12 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   };
 
   const handlePlayerSelectionChange = (playerId: string | null) => {
-    // If clicking the same player, just close the dropdown (don't deselect)
+    // If clicking the same player, just close the dropdown
     if (selectedPlayerId === playerId) {
       setPlayerDropdownOpen(false);
       return;
     }
-    // Mark this as a manual selection
-    isManualPlayerSelection.current = true;
-    // Select the new player
     setSelectedPlayerId(playerId);
-    // Clear active session when player selection changes
     setActiveSessionId(null);
     setPlayerDropdownOpen(false);
   };
@@ -219,16 +199,8 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   const handleSelectSession = async (id: string) => {
     // If session has no coach assigned, assign current admin as coach
     const session = sessions.find(s => s.id === id);
-    if (session) {
-      if (!session.coachId || session.coachId === '') {
-        await communicationService.updateSession(id, { coachId: currentUser.id });
-      }
-      // Auto-select the player from this session only if:
-      // 1. No player is currently selected AND
-      // 2. No manual selection has been made (to prevent overriding user choice)
-      if (session.playerIds && session.playerIds.length > 0 && !selectedPlayerId && !isManualPlayerSelection.current) {
-        setSelectedPlayerId(session.playerIds[0]);
-      }
+    if (session && (!session.coachId || session.coachId === '')) {
+      await communicationService.updateSession(id, { coachId: currentUser.id });
     }
     
     setActiveSessionId(id);
