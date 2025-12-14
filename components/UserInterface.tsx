@@ -174,8 +174,6 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
             <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">{currentUser.name}</h2>
           </div>
         </div>
-
-        </div>
       </div>
 
       {/* Main Content */}
