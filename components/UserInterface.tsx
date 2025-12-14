@@ -12,9 +12,10 @@ interface UserInterfaceProps {
 }
 
 export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => {
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const manuallySelectedSessionRef = useRef<string | null>(null); // Track manually selected session
+  const allowSessionChangeRef = useRef<boolean>(false); // Only true when button is clicked
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,7 +25,17 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-  // Keep ref in sync with state
+  // Wrapper for setActiveSessionId that ONLY allows changes from handleSelectSession
+  const setActiveSessionId = (id: string | null, allow: boolean = false) => {
+    if (!allow && !allowSessionChangeRef.current) {
+      console.warn('BLOCKED: Attempted to change activeSessionId without permission', id);
+      return; // BLOCK any unauthorized changes
+    }
+    allowSessionChangeRef.current = false; // Reset the flag
+    setActiveSessionIdState(id);
+  };
+
+  // Keep ref in sync with state  
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
@@ -73,11 +84,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       
       setSessions(sessionsToSet);
       
-      // CRITICAL: Verify activeSessionId matches manually selected session
-      // If it doesn't, restore it (but only if a manual selection was made)
-      if (manuallySelectedSessionRef.current && activeSessionIdRef.current !== manuallySelectedSessionRef.current) {
-        setActiveSessionId(manuallySelectedSessionRef.current);
-      }
+      // DO NOT touch activeSessionId here - absolutely forbidden
     });
 
     // Poll for messages (less frequent now with real-time sessions)
@@ -158,7 +165,8 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const handleSelectSession = (id: string) => {
     // Mark this as a manual selection - prevent any auto-switching
     manuallySelectedSessionRef.current = id;
-    setActiveSessionId(id);
+    allowSessionChangeRef.current = true; // Allow this change
+    setActiveSessionId(id, true);
     setSessionDropdownOpen(false);
   };
 
@@ -171,7 +179,8 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         // If the deleted session was active, clear it
         if (activeSessionId === sessionId) {
           manuallySelectedSessionRef.current = null;
-          setActiveSessionId(null);
+          allowSessionChangeRef.current = true; // Allow this change
+          setActiveSessionId(null, true);
         }
         setShowDeleteConfirm(null);
       } catch (error) {
@@ -460,7 +469,10 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
             <SessionHeader 
               session={activeSession} 
               coach={getCoachUser()}
-              onBackMobile={() => setActiveSessionId(null)}
+              onBackMobile={() => {
+                allowSessionChangeRef.current = true; // Allow this change
+                setActiveSessionId(null, true);
+              }}
             />
             <div className="flex-1 overflow-hidden relative">
               <ChatInterface 
