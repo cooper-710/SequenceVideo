@@ -48,15 +48,24 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       // DO NOT modify activeSessionId here - only the button click can change it
       // Ensure active session is in the sessions array so activeSession can find it
       // This prevents activeSession from becoming undefined when sessions update
+      // IMPORTANT: Preserve the active session at the top of the array to prevent UI switching
       let sessionsToSet = [...userSessions];
       if (currentActiveId) {
         const activeSessionInFiltered = userSessions.find(s => s.id === currentActiveId);
         const activeSessionInOriginal = newSessions.find(s => s.id === currentActiveId);
         
         // If active session exists in original but not in filtered, include it anyway
-        // This ensures the UI can still display the selected session even if filtering excludes it
         if (!activeSessionInFiltered && activeSessionInOriginal) {
           sessionsToSet.push(activeSessionInOriginal);
+        }
+        
+        // CRITICAL: Reorder so active session is first to prevent UI from showing wrong session
+        // This ensures activeSession.find() always finds the correct session
+        const activeIndex = sessionsToSet.findIndex(s => s.id === currentActiveId);
+        if (activeIndex > 0) {
+          const activeSession = sessionsToSet[activeIndex];
+          sessionsToSet.splice(activeIndex, 1);
+          sessionsToSet.unshift(activeSession);
         }
       }
       
@@ -201,7 +210,12 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     // Sessions will update automatically via real-time subscription
   };
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
+  // CRITICAL: Use useMemo to ensure activeSession is stable and doesn't change unexpectedly
+  // Only recompute when activeSessionId or sessions actually change
+  const activeSession = React.useMemo(() => {
+    if (!activeSessionId || !sessions.length) return undefined;
+    return sessions.find(s => s.id === activeSessionId);
+  }, [activeSessionId, sessions]);
   const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
 
   // Get coach user for header (first admin/coach found in messages, or default)
