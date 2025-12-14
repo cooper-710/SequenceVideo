@@ -41,14 +41,19 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       const userSessions = newSessions.filter(session => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
-      setSessions(userSessions);
       
-      // Never auto-select - user must manually choose a session
-      // Only clear active session if it was deleted
-      const currentActiveId = activeSessionIdRef.current;
-      if (currentActiveId && !userSessions.find(s => s.id === currentActiveId)) {
-        setActiveSessionId(null);
-      }
+      // Use functional state update to ensure we have the latest activeSessionId
+      // Only clear if the session was actually deleted (missing from original list)
+      setActiveSessionId((currentActiveId) => {
+        if (currentActiveId && !newSessions.find(s => s.id === currentActiveId)) {
+          // Session was deleted - clear it
+          return null;
+        }
+        // Preserve the current selection - don't change it
+        return currentActiveId;
+      });
+      
+      setSessions(userSessions);
     });
 
     // Poll for messages (less frequent now with real-time sessions)
