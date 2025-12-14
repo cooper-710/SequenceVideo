@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
+import { SessionList } from './SessionList';
 import { Session, Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
 import sequenceLogo from '../Sequence.png';
@@ -41,15 +42,29 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   // Auto-create or find default session on mount
   useEffect(() => {
     const ensureDefaultSession = async () => {
-      // Find existing session for this user
-      const existingSession = sessions.find(session => 
+      // Prioritize sessions with a coach assigned (active admin sessions)
+      // Sort: sessions with coach first, then by date (most recent first)
+      const sortedSessions = [...sessions].sort((a, b) => {
+        const aHasCoach = a.coachId && a.coachId !== '';
+        const bHasCoach = b.coachId && b.coachId !== '';
+        
+        // Sessions with coach come first
+        if (aHasCoach && !bHasCoach) return -1;
+        if (!aHasCoach && bHasCoach) return 1;
+        
+        // Then sort by date (most recent first)
+        return b.date.getTime() - a.date.getTime();
+      });
+
+      // Find existing session for this user (prioritizing those with coaches)
+      const existingSession = sortedSessions.find(session => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
 
       if (existingSession && !activeSessionId) {
         setActiveSessionId(existingSession.id);
       } else if (!existingSession && !activeSessionId) {
-        // Create a default session
+        // Only create a default session if user has no sessions at all
         const sessionId = crypto.randomUUID();
         const newSession: Session = {
           id: sessionId,
@@ -177,33 +192,46 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 w-full bg-black relative z-0 overflow-hidden">
-        {activeSession ? (
-          <>
-            <SessionHeader 
-              session={activeSession} 
-              coach={getCoachUser()}
-              onBackMobile={() => {}}
-            />
-            <div className="flex-1 overflow-hidden relative">
-              <ChatInterface 
-                messages={activeMessages}
-                currentUser={currentUser}
-                onSendMessage={handleSendMessage}
-                onUpdateMessage={handleUpdateMessage}
-                otherUserName="Admin"
+      <div className="flex-1 flex min-w-0 w-full bg-black relative z-0 overflow-hidden">
+        {/* SessionList sidebar */}
+        <div className="hidden md:flex w-64 border-r border-white/5 bg-black/40 flex-shrink-0">
+          <SessionList
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={setActiveSessionId}
+            messages={messages}
+          />
+        </div>
+
+        {/* Main chat area */}
+        <div className="flex-1 flex flex-col min-w-0 w-full bg-black relative z-0 overflow-hidden">
+          {activeSession ? (
+            <>
+              <SessionHeader 
+                session={activeSession} 
+                coach={getCoachUser()}
+                onBackMobile={() => {}}
               />
+              <div className="flex-1 overflow-hidden relative">
+                <ChatInterface 
+                  messages={activeMessages}
+                  currentUser={currentUser}
+                  onSendMessage={handleSendMessage}
+                  onUpdateMessage={handleUpdateMessage}
+                  otherUserName="Admin"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-sequence-muted p-8 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-sequence-card flex items-center justify-center mb-4 border border-sequence-border">
+                <div className="w-8 h-8 opacity-50" />
+              </div>
+              <h3 className="text-lg font-medium text-white mb-2">Loading...</h3>
+              <p className="max-w-xs">Setting up your chat session.</p>
             </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-sequence-muted p-8 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-sequence-card flex items-center justify-center mb-4 border border-sequence-border">
-              <div className="w-8 h-8 opacity-50" />
-            </div>
-            <h3 className="text-lg font-medium text-white mb-2">Loading...</h3>
-            <p className="max-w-xs">Setting up your chat session.</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

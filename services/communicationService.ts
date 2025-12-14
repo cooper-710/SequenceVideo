@@ -191,7 +191,7 @@ class CommunicationService {
     // Check if user is an admin/coach
     const isAdmin = await this.isUserAdmin(userId);
     
-    return allSessions.filter(session => {
+    const filteredSessions = allSessions.filter(session => {
       // Include if user is coach, player in session, or admin
       const isCoach = session.coachId === userId;
       const isPlayer = session.playerIds.includes(userId);
@@ -200,6 +200,19 @@ class CommunicationService {
       const isDeleted = deletedSessionIds.has(session.id);
       
       return (isCoach || isPlayer || isUnassignedSession) && !isDeleted;
+    });
+
+    // Sort: sessions with coach first, then by date (most recent first)
+    return filteredSessions.sort((a, b) => {
+      const aHasCoach = a.coachId && a.coachId !== '';
+      const bHasCoach = b.coachId && b.coachId !== '';
+      
+      // Sessions with coach come first
+      if (aHasCoach && !bHasCoach) return -1;
+      if (!aHasCoach && bHasCoach) return 1;
+      
+      // Then sort by date (most recent first)
+      return b.date.getTime() - a.date.getTime();
     });
   }
 
