@@ -14,6 +14,7 @@ interface UserInterfaceProps {
 export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
+  const manuallySelectedSessionRef = useRef<string | null>(null); // Track manually selected session
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -42,13 +43,11 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
       
-      // Get current active session ID from ref for synchronous check
-      const currentActiveId = activeSessionIdRef.current;
+      // Get current active session ID - prioritize manually selected session
+      const currentActiveId = manuallySelectedSessionRef.current || activeSessionIdRef.current;
       
-      // DO NOT modify activeSessionId here - only the button click can change it
+      // ABSOLUTELY DO NOT modify activeSessionId here - only handleSelectSession can change it
       // Ensure active session is in the sessions array so activeSession can find it
-      // This prevents activeSession from becoming undefined when sessions update
-      // IMPORTANT: Preserve the active session at the top of the array to prevent UI switching
       let sessionsToSet = [...userSessions];
       if (currentActiveId) {
         const activeSessionInFiltered = userSessions.find(s => s.id === currentActiveId);
@@ -59,17 +58,26 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
           sessionsToSet.push(activeSessionInOriginal);
         }
         
-        // CRITICAL: Reorder so active session is first to prevent UI from showing wrong session
-        // This ensures activeSession.find() always finds the correct session
+        // CRITICAL: Reorder so manually selected session is FIRST
+        // This prevents UI from showing most recent session when sessions update
         const activeIndex = sessionsToSet.findIndex(s => s.id === currentActiveId);
         if (activeIndex > 0) {
           const activeSession = sessionsToSet[activeIndex];
           sessionsToSet.splice(activeIndex, 1);
           sessionsToSet.unshift(activeSession);
+        } else if (activeIndex === -1 && activeSessionInOriginal) {
+          // If not found but exists in original, add it at the beginning
+          sessionsToSet.unshift(activeSessionInOriginal);
         }
       }
       
       setSessions(sessionsToSet);
+      
+      // CRITICAL: Verify activeSessionId matches manually selected session
+      // If it doesn't, restore it (but only if a manual selection was made)
+      if (manuallySelectedSessionRef.current && activeSessionIdRef.current !== manuallySelectedSessionRef.current) {
+        setActiveSessionId(manuallySelectedSessionRef.current);
+      }
     });
 
     // Poll for messages (less frequent now with real-time sessions)
@@ -148,6 +156,8 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   };
 
   const handleSelectSession = (id: string) => {
+    // Mark this as a manual selection - prevent any auto-switching
+    manuallySelectedSessionRef.current = id;
     setActiveSessionId(id);
     setSessionDropdownOpen(false);
   };
@@ -160,6 +170,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         // Sessions will update automatically via real-time subscription
         // If the deleted session was active, clear it
         if (activeSessionId === sessionId) {
+          manuallySelectedSessionRef.current = null;
           setActiveSessionId(null);
         }
         setShowDeleteConfirm(null);
