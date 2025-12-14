@@ -15,6 +15,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasManuallySelected, setHasManuallySelected] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Load sessions on mount and auto-select/create default session
   useEffect(() => {
@@ -29,21 +30,31 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       
       setSessions(userSessions);
       
-      // If active session no longer exists, clear it
+      // If active session no longer exists, clear it (but don't auto-select if user manually selected)
       if (activeSessionId && !userSessions.find(s => s.id === activeSessionId)) {
-        setActiveSessionId(null);
+        // Only clear if user hasn't manually selected, otherwise keep it null
+        if (!hasManuallySelected) {
+          setActiveSessionId(null);
+        } else {
+          // If manually selected session is deleted, clear it
+          setActiveSessionId(null);
+          setHasManuallySelected(false);
+        }
       }
     });
     
     return () => {
       unsubscribeSessions();
     };
-  }, [currentUser, activeSessionId]);
+  }, [currentUser, activeSessionId, hasManuallySelected]);
 
-  // Auto-create or find default session on mount
+  // Auto-create or find default session on mount (only once)
   useEffect(() => {
-    // Only auto-select if user hasn't manually selected a session
-    if (hasManuallySelected) return;
+    // Only auto-select if user hasn't manually selected a session AND we haven't initialized yet
+    if (hasManuallySelected || hasInitialized) return;
+    
+    // Wait for sessions to load
+    if (sessions.length === 0) return;
 
     const ensureDefaultSession = async () => {
       // Prioritize sessions with a coach assigned (active admin sessions)
@@ -65,9 +76,13 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
 
-      if (existingSession && !activeSessionId) {
-        setActiveSessionId(existingSession.id);
-      } else if (!existingSession && !activeSessionId) {
+      if (existingSession) {
+        // Only set if we don't already have this session selected
+        if (activeSessionId !== existingSession.id) {
+          setActiveSessionId(existingSession.id);
+        }
+        setHasInitialized(true);
+      } else {
         // Only create a default session if user has no sessions at all
         const sessionId = crypto.randomUUID();
         const newSession: Session = {
@@ -82,13 +97,12 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
 
         await communicationService.createSession(newSession);
         setActiveSessionId(sessionId);
+        setHasInitialized(true);
       }
     };
 
-    if (sessions.length > 0 || activeSessionId === null) {
-      ensureDefaultSession();
-    }
-  }, [sessions, currentUser.id, activeSessionId, hasManuallySelected]);
+    ensureDefaultSession();
+  }, [sessions, currentUser.id, activeSessionId, hasManuallySelected, hasInitialized]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -144,6 +158,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   // Handler for manual session selection
   const handleSelectSession = (sessionId: string) => {
     setHasManuallySelected(true);
+    setHasInitialized(true); // Also mark as initialized to prevent auto-selection
     setActiveSessionId(sessionId);
   };
 
