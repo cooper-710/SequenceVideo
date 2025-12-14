@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
 import { Session, Message, MessageType, User, UserRole } from '../types';
@@ -212,7 +212,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
 
   // CRITICAL: Use useMemo to ensure activeSession is stable and doesn't change unexpectedly
   // Only recompute when activeSessionId or sessions actually change
-  const activeSession = React.useMemo(() => {
+  const activeSession = useMemo(() => {
     if (!activeSessionId || !sessions.length) return undefined;
     return sessions.find(s => s.id === activeSessionId);
   }, [activeSessionId, sessions]);
