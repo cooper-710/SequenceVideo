@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { SessionHeader } from './SessionHeader';
+import { SessionList } from './SessionList';
 import { Session, Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
 import { createUserWithToken } from '../services/authService';
-import { Plus, Users, ChevronDown, Trash2, X, Check } from 'lucide-react';
+import { Plus, Users, ChevronDown, Trash2, X, Check, RotateCcw } from 'lucide-react';
 import sequenceLogo from '../Sequence.png';
 
 interface AdminInterfaceProps {
@@ -209,6 +210,30 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     }
   };
 
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      // Delete for all participants
+      await communicationService.deleteSessionForAll(sessionId, currentUser.id);
+      // If the deleted session was active, clear it
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      alert('Failed to delete session. Please check the console for details.');
+    }
+  };
+
+  const handleRestoreSession = async (sessionId: string) => {
+    try {
+      // Restore for all participants
+      await communicationService.restoreSessionForAll(sessionId);
+    } catch (error) {
+      console.error('Failed to restore session:', error);
+      alert('Failed to restore session. Please check the console for details.');
+    }
+  };
+
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
 
@@ -408,33 +433,48 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 w-full bg-black relative z-0 overflow-hidden">
-        {activeSession && selectedPlayerId ? (
-          <>
-            <SessionHeader 
-              session={activeSession} 
-              coach={currentUser}
-              onBackMobile={() => {}}
-            />
-            <div className="flex-1 overflow-hidden relative">
-              <ChatInterface 
-                messages={activeMessages}
-                currentUser={currentUser}
-                onSendMessage={handleSendMessage}
-                onUpdateMessage={handleUpdateMessage}
-                otherUserName={selectedPlayer?.name || 'User'}
+      <div className="flex-1 flex min-w-0 w-full bg-black relative z-0 overflow-hidden">
+        {/* SessionList sidebar */}
+        <div className="hidden md:flex w-64 border-r border-white/5 bg-black/40 flex-shrink-0">
+          <SessionList
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={setActiveSessionId}
+            messages={messages}
+            onDeleteSession={handleDeleteSession}
+            currentUserId={currentUser.id}
+          />
+        </div>
+
+        {/* Main chat area */}
+        <div className="flex-1 flex flex-col min-w-0 w-full bg-black relative z-0 overflow-hidden">
+          {activeSession && selectedPlayerId ? (
+            <>
+              <SessionHeader 
+                session={activeSession} 
+                coach={currentUser}
+                onBackMobile={() => {}}
               />
+              <div className="flex-1 overflow-hidden relative">
+                <ChatInterface 
+                  messages={activeMessages}
+                  currentUser={currentUser}
+                  onSendMessage={handleSendMessage}
+                  onUpdateMessage={handleUpdateMessage}
+                  otherUserName={selectedPlayer?.name || 'User'}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-sequence-muted p-8 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-sequence-card flex items-center justify-center mb-4 border border-sequence-border">
+                <Users className="w-8 h-8 opacity-50" />
+              </div>
+              <h3 className="text-lg font-medium text-white mb-2">Select a Player</h3>
+              <p className="max-w-xs">Choose a player from the dropdown above to start chatting.</p>
             </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-sequence-muted p-8 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-sequence-card flex items-center justify-center mb-4 border border-sequence-border">
-              <Users className="w-8 h-8 opacity-50" />
-            </div>
-            <h3 className="text-lg font-medium text-white mb-2">Select a Player</h3>
-            <p className="max-w-xs">Choose a player from the dropdown above to start chatting.</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

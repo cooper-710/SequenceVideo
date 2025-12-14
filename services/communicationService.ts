@@ -236,30 +236,77 @@ class CommunicationService {
     }
   }
 
-  async deleteSessionForUser(userId: string, sessionId: string): Promise<void> {
+  // Delete session for all participants (admin and players)
+  async deleteSessionForAll(sessionId: string, deletedByUserId: string): Promise<void> {
     if (!isSupabaseConfigured()) {
       throw new Error('Supabase is not configured');
     }
 
     try {
-      // Use upsert to handle duplicate deletions gracefully (idempotent operation)
+      // Get the session to find all participants
+      const session = await this.getSession(sessionId);
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Get all user IDs involved in this session
+      const userIds: string[] = [];
+      if (session.coachId) {
+        userIds.push(session.coachId);
+      }
+      if (session.playerIds && session.playerIds.length > 0) {
+        userIds.push(...session.playerIds);
+      }
+
+      // Delete session for all users
+      const deletions = userIds.map(userId => ({
+        user_id: userId,
+        session_id: sessionId
+      }));
+
+      // Use upsert to handle duplicate deletions gracefully
       const { error } = await supabase
         .from('user_session_deletions')
-        .upsert({
-          user_id: userId,
-          session_id: sessionId
-        }, {
+        .upsert(deletions, {
           onConflict: 'user_id,session_id'
         });
 
       if (error) {
-        console.error('Error deleting session for user:', error);
+        console.error('Error deleting session for all users:', error);
         throw error;
       }
     } catch (error) {
-      console.error('Error deleting session for user:', error);
-      throw error; // Re-throw so calling code can handle it
+      console.error('Error deleting session for all users:', error);
+      throw error;
     }
+  }
+
+  // Restore session for all participants (admin only)
+  async restoreSessionForAll(sessionId: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase is not configured');
+    }
+
+    try {
+      // Delete all deletion records for this session
+      const { error } = await supabase
+        .from('user_session_deletions')
+        .delete()
+        .eq('session_id', sessionId);
+
+      if (error) {
+        console.error('Error restoring session for all users:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error restoring session for all users:', error);
+      throw error;
+    }
+  }
+
+  async deleteSessionForUser(userId: string, sessionId: string): Promise<void> {
+    // Use the new method that deletes for all
+    await this.deleteSessionForAll(sessionId, userId);
   }
 
   async restoreSessionForUser(userId: string, sessionId: string): Promise<void> {

@@ -14,6 +14,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [hasManuallySelected, setHasManuallySelected] = useState(false);
 
   // Load sessions on mount and auto-select/create default session
   useEffect(() => {
@@ -41,6 +42,9 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
 
   // Auto-create or find default session on mount
   useEffect(() => {
+    // Only auto-select if user hasn't manually selected a session
+    if (hasManuallySelected) return;
+
     const ensureDefaultSession = async () => {
       // Prioritize sessions with a coach assigned (active admin sessions)
       // Sort: sessions with coach first, then by date (most recent first)
@@ -84,7 +88,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     if (sessions.length > 0 || activeSessionId === null) {
       ensureDefaultSession();
     }
-  }, [sessions, currentUser.id, activeSessionId]);
+  }, [sessions, currentUser.id, activeSessionId, hasManuallySelected]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -135,6 +139,22 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const handleUpdateMessage = async (messageId: string, updates: Partial<Message>) => {
     if (!activeSessionId) return;
     await communicationService.updateMessage(activeSessionId, messageId, updates);
+  };
+
+  // Handler for manual session selection
+  const handleSelectSession = (sessionId: string) => {
+    setHasManuallySelected(true);
+    setActiveSessionId(sessionId);
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      // Delete for all participants
+      await communicationService.deleteSessionForAll(sessionId, currentUser.id);
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      alert('Failed to delete session. Please check the console for details.');
+    }
   };
 
 
@@ -198,8 +218,10 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
           <SessionList
             sessions={sessions}
             activeSessionId={activeSessionId}
-            onSelectSession={setActiveSessionId}
+            onSelectSession={handleSelectSession}
             messages={messages}
+            onDeleteSession={handleDeleteSession}
+            currentUserId={currentUser.id}
           />
         </div>
 
