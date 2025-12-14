@@ -45,25 +45,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       // Get current active session ID from ref for synchronous check
       const currentActiveId = activeSessionIdRef.current;
       
-      // Use functional state update to ensure we have the latest activeSessionId
-      // Preserve the selection UNLESS the session was actually deleted
-      setActiveSessionId((latestActiveId) => {
-        // If no active session, don't change anything
-        if (!latestActiveId) {
-          return latestActiveId;
-        }
-        
-        // Check if session exists in the original list (to see if it was deleted)
-        const existsInOriginal = newSessions.find(s => s.id === latestActiveId);
-        if (!existsInOriginal) {
-          // Session was deleted from database - clear it
-          return null;
-        }
-        
-        // Session exists - preserve selection
-        return latestActiveId;
-      });
-      
+      // DO NOT modify activeSessionId here - only the button click can change it
       // Ensure active session is in the sessions array so activeSession can find it
       // This prevents activeSession from becoming undefined when sessions update
       let sessionsToSet = [...userSessions];
@@ -215,7 +197,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     await communicationService.createSession(newSession);
     setNewSessionTitle('');
     setShowCreateSession(false);
-    setActiveSessionId(newSession.id);
+    // DO NOT auto-select new session - user must manually select it via button
     // Sessions will update automatically via real-time subscription
   };
 
