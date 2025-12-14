@@ -42,18 +42,43 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
       
+      // Get current active session ID from ref for synchronous check
+      const currentActiveId = activeSessionIdRef.current;
+      
       // Use functional state update to ensure we have the latest activeSessionId
-      // Only clear if the session was actually deleted (missing from original list)
-      setActiveSessionId((currentActiveId) => {
-        if (currentActiveId && !newSessions.find(s => s.id === currentActiveId)) {
-          // Session was deleted - clear it
+      // Preserve the selection UNLESS the session was actually deleted
+      setActiveSessionId((latestActiveId) => {
+        // If no active session, don't change anything
+        if (!latestActiveId) {
+          return latestActiveId;
+        }
+        
+        // Check if session exists in the original list (to see if it was deleted)
+        const existsInOriginal = newSessions.find(s => s.id === latestActiveId);
+        if (!existsInOriginal) {
+          // Session was deleted from database - clear it
           return null;
         }
-        // Preserve the current selection - don't change it
-        return currentActiveId;
+        
+        // Session exists - preserve selection
+        return latestActiveId;
       });
       
-      setSessions(userSessions);
+      // Ensure active session is in the sessions array so activeSession can find it
+      // This prevents activeSession from becoming undefined when sessions update
+      let sessionsToSet = [...userSessions];
+      if (currentActiveId) {
+        const activeSessionInFiltered = userSessions.find(s => s.id === currentActiveId);
+        const activeSessionInOriginal = newSessions.find(s => s.id === currentActiveId);
+        
+        // If active session exists in original but not in filtered, include it anyway
+        // This ensures the UI can still display the selected session even if filtering excludes it
+        if (!activeSessionInFiltered && activeSessionInOriginal) {
+          sessionsToSet.push(activeSessionInOriginal);
+        }
+      }
+      
+      setSessions(sessionsToSet);
     });
 
     // Poll for messages (less frequent now with real-time sessions)
