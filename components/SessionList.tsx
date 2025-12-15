@@ -70,7 +70,12 @@ export const SessionList: React.FC<SessionListProps> = ({
     <div className="flex flex-col h-full w-full">
       {/* List */}
       <div className="overflow-y-auto flex-1 px-2 sm:px-3 py-2 space-y-1">
-        {sessions.map((session) => {
+        {sessions.length === 0 ? (
+          <div className="text-xs sm:text-sm text-neutral-500 py-4 text-center">
+            No sessions available
+          </div>
+        ) : (
+          sessions.map((session) => {
           const isActive = activeSessionId === session.id;
           const thumbnailUrl = getSessionThumbnail(session.id, messages);
           const hasVideo = thumbnailUrl !== null;
@@ -175,7 +180,7 @@ export const SessionList: React.FC<SessionListProps> = ({
               )}
             </div>
           );
-        })}
+        }))}
       </div>
     </div>
   );

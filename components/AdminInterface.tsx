@@ -3,24 +3,12 @@ import { ChatInterface } from './ChatInterface';
 import { Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
 import { createUserWithToken } from '../services/authService';
-import { Plus, Users, ChevronDown, Trash2, X, Check } from 'lucide-react';
+import { Plus, Users, ChevronDown, Trash2, X } from 'lucide-react';
 import sequenceLogo from '../Sequence.png';
 
 interface AdminInterfaceProps {
   currentUser: User;
 }
-
-// Helper function to get two initials from a name
-const getInitials = (name: string): string => {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-  } else if (parts.length === 1 && parts[0].length >= 2) {
-    return parts[0].substring(0, 2).toUpperCase();
-  } else {
-    return parts[0].charAt(0).toUpperCase();
-  }
-};
 
 export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -196,9 +184,6 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
             >
               {selectedPlayer ? (
                 <>
-                  <div className="w-6 h-6 rounded-full bg-orange-500 border border-neutral-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {getInitials(selectedPlayer.name)}
-                  </div>
                   <span className="truncate">{selectedPlayer.name}</span>
                   <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform flex-shrink-0 ${playerDropdownOpen ? 'rotate-180' : ''}`} />
                 </>
@@ -250,16 +235,6 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                                       : 'bg-neutral-900/50 border-neutral-700 hover:bg-neutral-800/50 hover:border-neutral-600'
                                   } ${isConfirmingDelete ? 'ring-2 ring-red-500/50' : ''}`}
                                 >
-                                  <div className="relative flex-shrink-0">
-                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-orange-500 border-2 border-neutral-700 flex items-center justify-center text-white text-xs sm:text-sm font-bold">
-                                      {getInitials(player.name)}
-                                    </div>
-                                    {isSelected && (
-                                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-orange-500 border-2 border-neutral-900 flex items-center justify-center">
-                                        <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
-                                      </div>
-                                    )}
-                                  </div>
                                   <div className="flex-1 text-left min-w-0">
                                     <div className="text-xs sm:text-sm font-medium text-white truncate">
                                       {player.name}
