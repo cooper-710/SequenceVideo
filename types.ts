@@ -46,7 +46,8 @@ export interface Annotation {
 
 export interface Message {
   id: string;
-  sessionId: string;
+  coachId: string;  // Admin/coach ID
+  playerId: string; // Player ID
   senderId: string;
   type: MessageType;
   content: string; // Text content or URL to media
@@ -58,17 +59,6 @@ export interface Message {
     fileSize?: string;
     aiSummary?: string;
   };
-}
-
-export interface Session {
-  id: string;
-  title: string;
-  date: Date;
-  previewImage?: string; // Optional - will be generated from video thumbnails
-  status: 'active' | 'archived' | 'new_feedback';
-  coachId: string;
-  playerIds: string[]; // Array of player IDs that the admin is communicating with
-  tags: string[];
 }
 
 export interface AIResponse {

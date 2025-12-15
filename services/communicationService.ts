@@ -1,4 +1,4 @@
-import { Message, Session, User, MessageType, UserRole } from '../types';
+import { Message, User, MessageType, UserRole } from '../types';
 import { supabase } from './supabaseClient';
 
 // Check if Supabase is configured
@@ -12,9 +12,7 @@ const isSupabaseConfigured = () => {
 class CommunicationService {
   private listeners: Map<string, Set<(messages: Message[]) => void>> = new Map();
   private realtimeSubscriptions: Map<string, any> = new Map();
-  // Add sessions list listeners
-  private sessionsListeners: Set<(sessions: Session[]) => void> = new Set();
-  private currentUserId: string | null = null; // Track current user for filtered sessions
+  private currentUserId: string | null = null;
 
   constructor() {
     // Set up real-time subscriptions if Supabase is configured
@@ -35,401 +33,98 @@ class CommunicationService {
           table: 'messages'
         },
         (payload) => {
-          // Notify listeners for the affected session
-          let sessionId: string | null = null;
+          // Notify listeners for the affected conversation
+          let coachId: string | null = null;
+          let playerId: string | null = null;
           
           // Handle INSERT and UPDATE (payload.new exists)
-          if (payload.new && 'session_id' in payload.new) {
-            sessionId = payload.new.session_id as string;
+          if (payload.new) {
+            coachId = payload.new.coach_id as string;
+            playerId = payload.new.player_id as string;
           }
           // Handle DELETE (payload.old exists)
-          else if (payload.old && 'session_id' in payload.old) {
-            sessionId = payload.old.session_id as string;
+          else if (payload.old) {
+            coachId = payload.old.coach_id as string;
+            playerId = payload.old.player_id as string;
           }
           
-          if (sessionId) {
-            this.loadMessages(sessionId).then(messages => {
-              this.notifyListeners(sessionId!, messages);
+          if (coachId && playerId) {
+            const conversationKey = `${coachId}::${playerId}`;
+            this.loadMessagesForConversation(coachId, playerId).then(messages => {
+              this.notifyListeners(conversationKey, messages);
             });
           }
-        }
-      )
-      .subscribe();
-
-    // Subscribe to session changes
-    const sessionsChannel = supabase
-      .channel('sessions')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sessions'
-        },
-        () => {
-          // Reload sessions list for all listeners
-          this.notifySessionsListeners();
-          // Also reload messages for active listeners (existing behavior)
-          this.listeners.forEach((_, sessionId) => {
-            this.loadMessages(sessionId).then(messages => {
-              this.notifyListeners(sessionId, messages);
-            });
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'session_players'
-        },
-        () => {
-          // When players are added/removed from sessions, reload sessions
-          this.notifySessionsListeners();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_session_deletions'
-        },
-        () => {
-          // When sessions are deleted for users, reload sessions
-          this.notifySessionsListeners();
         }
       )
       .subscribe();
 
     this.realtimeSubscriptions.set('messages', messagesChannel);
-    this.realtimeSubscriptions.set('sessions', sessionsChannel);
   }
 
-  // Session Management
-  async createSession(session: Session): Promise<void> {
+  // Conversation Management
+  async getConversationsForCoach(coachId: string): Promise<User[]> {
     if (!isSupabaseConfigured()) {
-      console.warn('Supabase not configured, session creation failed');
-      return;
+      return [];
     }
 
     try {
-      // Create session
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('sessions')
-        .insert({
-          id: session.id,
-          title: session.title,
-          date: session.date.toISOString(),
-          preview_image: session.previewImage || null,
-          status: session.status,
-          coach_id: session.coachId || null,
-          tags: session.tags || []
-        })
-        .select()
-        .single();
+      // Get all unique player IDs that have messages with this coach
+      const { data, error } = await supabase
+        .from('messages')
+        .select('player_id')
+        .eq('coach_id', coachId)
+        .order('created_at', { ascending: false });
 
-      if (sessionError) throw sessionError;
+      if (error) throw error;
 
-      // Add players to session_players junction table
-      if (session.playerIds && session.playerIds.length > 0) {
-        const sessionPlayers = session.playerIds.map(playerId => ({
-          session_id: session.id,
-          player_id: playerId
-        }));
+      // Get unique player IDs
+      const uniquePlayerIds = [...new Set((data || []).map((m: any) => m.player_id))];
+      
+      // Fetch player details
+      const players = await Promise.all(
+        uniquePlayerIds.map(id => this.getPlayer(id))
+      );
 
-        const { error: playersError } = await supabase
-          .from('session_players')
-          .insert(sessionPlayers);
-
-        if (playersError) throw playersError;
-      }
-
-      this.notifyListeners(session.id, []);
+      return players.filter(p => p !== undefined) as User[];
     } catch (error) {
-      console.error('Error creating session:', error);
+      console.error('Error loading conversations:', error);
+      return [];
     }
   }
 
-  async getSessions(): Promise<Session[]> {
+  async getMessagesForConversation(coachId: string, playerId: string): Promise<Message[]> {
     if (!isSupabaseConfigured()) {
       return [];
     }
 
     try {
       const { data, error } = await supabase
-        .from('sessions')
-        .select(`
-          *,
-          session_players(player_id)
-        `)
-        .order('date', { ascending: false });
+        .from('messages')
+        .select('*')
+        .eq('coach_id', coachId)
+        .eq('player_id', playerId)
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      return (data || []).map((s: any) => ({
-        id: s.id,
-        title: s.title,
-        date: new Date(s.date),
-        previewImage: s.preview_image || undefined,
-        status: s.status,
-        coachId: s.coach_id || '',
-        playerIds: (s.session_players || []).map((sp: any) => sp.player_id),
-        tags: s.tags || []
+      return (data || []).map((m: any) => ({
+        id: m.id,
+        coachId: m.coach_id,
+        playerId: m.player_id,
+        senderId: m.sender_id,
+        type: m.type as MessageType,
+        content: m.content,
+        createdAt: new Date(m.created_at),
+        metadata: m.metadata || {}
       }));
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      console.error('Error loading messages for conversation:', error);
       return [];
     }
   }
 
-  async getSessionsForUser(userId: string): Promise<Session[]> {
-    const allSessions = await this.getSessions();
-    const deletedSessionIds = await this.getDeletedSessionsForUser(userId);
-    
-    // Check if user is an admin/coach
-    const isAdmin = await this.isUserAdmin(userId);
-    
-    const filteredSessions = allSessions.filter(session => {
-      // Include if user is coach, player in session, or admin
-      const isCoach = session.coachId === userId;
-      const isPlayer = session.playerIds.includes(userId);
-      // Admins can see sessions with no coach assigned (waiting for coach)
-      const isUnassignedSession = isAdmin && (!session.coachId || session.coachId === '');
-      const isDeleted = deletedSessionIds.has(session.id);
-      
-      return (isCoach || isPlayer || isUnassignedSession) && !isDeleted;
-    });
-
-    // Sort: sessions with coach first, then by date (most recent first)
-    return filteredSessions.sort((a, b) => {
-      const aHasCoach = a.coachId && a.coachId !== '';
-      const bHasCoach = b.coachId && b.coachId !== '';
-      
-      // Sessions with coach come first
-      if (aHasCoach && !bHasCoach) return -1;
-      if (!aHasCoach && bHasCoach) return 1;
-      
-      // Then sort by date (most recent first)
-      return b.date.getTime() - a.date.getTime();
-    });
-  }
-
-  private async isUserAdmin(userId: string): Promise<boolean> {
-    if (!isSupabaseConfigured()) {
-      return false;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .single();
-
-      if (error || !data) return false;
-      return data.role === UserRole.COACH;
-    } catch (error) {
-      console.error('Error checking if user is admin:', error);
-      return false;
-    }
-  }
-
-  // Delete session for all participants (admin and players)
-  async deleteSessionForAll(sessionId: string, deletedByUserId: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured');
-    }
-
-    try {
-      // Get the session to find all participants
-      const session = await this.getSession(sessionId);
-      if (!session) {
-        throw new Error('Session not found');
-      }
-
-      // Get all user IDs involved in this session
-      const userIds: string[] = [];
-      if (session.coachId) {
-        userIds.push(session.coachId);
-      }
-      if (session.playerIds && session.playerIds.length > 0) {
-        userIds.push(...session.playerIds);
-      }
-
-      // Delete session for all users
-      const deletions = userIds.map(userId => ({
-        user_id: userId,
-        session_id: sessionId
-      }));
-
-      // Use upsert to handle duplicate deletions gracefully
-      const { error } = await supabase
-        .from('user_session_deletions')
-        .upsert(deletions, {
-          onConflict: 'user_id,session_id'
-        });
-
-      if (error) {
-        console.error('Error deleting session for all users:', error);
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error deleting session for all users:', error);
-      throw error;
-    }
-  }
-
-  // Restore session for all participants (admin only)
-  async restoreSessionForAll(sessionId: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured');
-    }
-
-    try {
-      // Delete all deletion records for this session
-      const { error } = await supabase
-        .from('user_session_deletions')
-        .delete()
-        .eq('session_id', sessionId);
-
-      if (error) {
-        console.error('Error restoring session for all users:', error);
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error restoring session for all users:', error);
-      throw error;
-    }
-  }
-
-  async deleteSessionForUser(userId: string, sessionId: string): Promise<void> {
-    // Use the new method that deletes for all
-    await this.deleteSessionForAll(sessionId, userId);
-  }
-
-  async restoreSessionForUser(userId: string, sessionId: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('user_session_deletions')
-        .delete()
-        .eq('user_id', userId)
-        .eq('session_id', sessionId);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error restoring session for user:', error);
-    }
-  }
-
-  async isSessionDeletedForUser(userId: string, sessionId: string): Promise<boolean> {
-    const deletedSessions = await this.getDeletedSessionsForUser(userId);
-    return deletedSessions.has(sessionId);
-  }
-
-  private async getDeletedSessionsForUser(userId: string): Promise<Set<string>> {
-    if (!isSupabaseConfigured()) {
-      return new Set();
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('user_session_deletions')
-        .select('session_id')
-        .eq('user_id', userId);
-
-      if (error) throw error;
-
-      return new Set((data || []).map((d: any) => d.session_id));
-    } catch (error) {
-      console.error('Error loading deleted sessions:', error);
-      return new Set();
-    }
-  }
-
-  async getSession(sessionId: string): Promise<Session | undefined> {
-    if (!isSupabaseConfigured()) {
-      return undefined;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('sessions')
-        .select(`
-          *,
-          session_players(player_id)
-        `)
-        .eq('id', sessionId)
-        .single();
-
-      if (error) throw error;
-      if (!data) return undefined;
-
-      return {
-        id: data.id,
-        title: data.title,
-        date: new Date(data.date),
-        previewImage: data.preview_image || undefined,
-        status: data.status,
-        coachId: data.coach_id || '',
-        playerIds: (data.session_players || []).map((sp: any) => sp.player_id),
-        tags: data.tags || []
-      };
-    } catch (error) {
-      console.error('Error loading session:', error);
-      return undefined;
-    }
-  }
-
-  async updateSession(sessionId: string, updates: Partial<Session>): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      return;
-    }
-
-    try {
-      const updateData: any = {};
-      if (updates.title !== undefined) updateData.title = updates.title;
-      if (updates.date !== undefined) updateData.date = updates.date.toISOString();
-      if (updates.previewImage !== undefined) updateData.preview_image = updates.previewImage;
-      if (updates.status !== undefined) updateData.status = updates.status;
-      if (updates.coachId !== undefined) updateData.coach_id = updates.coachId;
-      if (updates.tags !== undefined) updateData.tags = updates.tags;
-
-      const { error } = await supabase
-        .from('sessions')
-        .update(updateData)
-        .eq('id', sessionId);
-
-      if (error) throw error;
-
-      // Update playerIds if provided
-      if (updates.playerIds !== undefined) {
-        // Delete existing
-        await supabase
-          .from('session_players')
-          .delete()
-          .eq('session_id', sessionId);
-
-        // Insert new
-        if (updates.playerIds.length > 0) {
-          const sessionPlayers = updates.playerIds.map(playerId => ({
-            session_id: sessionId,
-            player_id: playerId
-          }));
-
-          await supabase
-            .from('session_players')
-            .insert(sessionPlayers);
-        }
-      }
-    } catch (error) {
-      console.error('Error updating session:', error);
-    }
+  private async loadMessagesForConversation(coachId: string, playerId: string): Promise<Message[]> {
+    return this.getMessagesForConversation(coachId, playerId);
   }
 
   // Player Management
@@ -486,9 +181,32 @@ class CommunicationService {
     }
   }
 
-  async addPlayer(player: User): Promise<void> {
-    // This should be done through authService, but keeping for compatibility
-    console.warn('addPlayer should be done through authService.createUserWithToken');
+  async getFirstCoach(): Promise<User | undefined> {
+    if (!isSupabaseConfigured()) {
+      return undefined;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', UserRole.COACH)
+        .limit(1)
+        .single();
+
+      if (error) throw error;
+      if (!data) return undefined;
+
+      return {
+        id: data.id,
+        name: data.name,
+        role: data.role as UserRole,
+        avatarUrl: data.avatar_url || ''
+      };
+    } catch (error) {
+      console.error('Error loading coach:', error);
+      return undefined;
+    }
   }
 
   async updatePlayer(playerId: string, updates: Partial<User>): Promise<void> {
@@ -548,69 +266,50 @@ class CommunicationService {
   }
 
   // Message Management
-  async sendMessage(sessionId: string, message: Message): Promise<void> {
+  async sendMessage(coachId: string, playerId: string, message: Message): Promise<void> {
     if (!isSupabaseConfigured()) {
       console.warn('Supabase not configured, message not sent');
-      return;
+      throw new Error('Supabase is not configured');
     }
 
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('messages')
         .insert({
           id: message.id,
-          session_id: sessionId,
+          coach_id: coachId,
+          player_id: playerId,
           sender_id: message.senderId,
           type: message.type,
           content: message.content,
           metadata: message.metadata || {},
           created_at: message.createdAt.toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error sending message:', error);
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
         });
+        throw error;
+      }
 
-      if (error) throw error;
-
-      // Real-time will notify listeners automatically
-      const messages = await this.loadMessages(sessionId);
-      this.notifyListeners(sessionId, messages);
+      // Real-time will notify listeners automatically, but also manually notify
+      const messages = await this.getMessagesForConversation(coachId, playerId);
+      const conversationKey = `${coachId}::${playerId}`;
+      this.notifyListeners(conversationKey, messages);
     } catch (error) {
       console.error('Error sending message:', error);
+      throw error; // Re-throw so caller can handle it
     }
   }
 
-  private async loadMessages(sessionId: string): Promise<Message[]> {
-    if (!isSupabaseConfigured()) {
-      return [];
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      return (data || []).map((m: any) => ({
-        id: m.id,
-        sessionId: m.session_id,
-        senderId: m.sender_id,
-        type: m.type as MessageType,
-        content: m.content,
-        createdAt: new Date(m.created_at),
-        metadata: m.metadata || {}
-      }));
-    } catch (error) {
-      console.error('Error loading messages:', error);
-      return [];
-    }
-  }
-
-  async getMessages(sessionId: string): Promise<Message[]> {
-    return this.loadMessages(sessionId);
-  }
-
-  async updateMessage(sessionId: string, messageId: string, updates: Partial<Message>): Promise<void> {
+  async updateMessage(coachId: string, playerId: string, messageId: string, updates: Partial<Message>): Promise<void> {
     if (!isSupabaseConfigured()) {
       return;
     }
@@ -624,85 +323,70 @@ class CommunicationService {
         .from('messages')
         .update(updateData)
         .eq('id', messageId)
-        .eq('session_id', sessionId);
+        .eq('coach_id', coachId)
+        .eq('player_id', playerId);
 
       if (error) throw error;
 
       // Real-time will notify listeners automatically
-      const messages = await this.loadMessages(sessionId);
-      this.notifyListeners(sessionId, messages);
+      const messages = await this.getMessagesForConversation(coachId, playerId);
+      const conversationKey = `${coachId}-${playerId}`;
+      this.notifyListeners(conversationKey, messages);
     } catch (error) {
       console.error('Error updating message:', error);
     }
   }
 
-  // Add method to set current user ID for filtered sessions
+  // Add method to set current user ID
   setCurrentUserId(userId: string | null): void {
     this.currentUserId = userId;
   }
 
-  // Add method to subscribe to sessions list changes
-  subscribeToSessions(callback: (sessions: Session[]) => void): () => void {
-    this.sessionsListeners.add(callback);
-    
-    // Load initial sessions
-    this.loadSessionsForListener().then(sessions => {
-      callback(sessions);
-    });
-
-    // Return unsubscribe function
-    return () => {
-      this.sessionsListeners.delete(callback);
-    };
-  }
-
-  private async loadSessionsForListener(): Promise<Session[]> {
-    if (this.currentUserId) {
-      return await this.getSessionsForUser(this.currentUserId);
-    }
-    return await this.getSessions();
-  }
-
-  private async notifySessionsListeners(): void {
-    const sessions = await this.loadSessionsForListener();
-    this.sessionsListeners.forEach(callback => callback(sessions));
-  }
-
   // Real-time updates via listeners
-  subscribe(sessionId: string, callback: (messages: Message[]) => void): () => void {
-    if (!this.listeners.has(sessionId)) {
-      this.listeners.set(sessionId, new Set());
+  // conversationKey format: "coachId::playerId" (using :: separator to avoid UUID hyphen conflicts)
+  subscribe(conversationKey: string, callback: (messages: Message[]) => void): () => void {
+    if (!this.listeners.has(conversationKey)) {
+      this.listeners.set(conversationKey, new Set());
     }
-    this.listeners.get(sessionId)!.add(callback);
+    this.listeners.get(conversationKey)!.add(callback);
 
-    // Load initial messages
-    this.loadMessages(sessionId).then(messages => {
-      callback(messages);
-    });
+    // Parse conversation key to load initial messages
+    const [coachId, playerId] = conversationKey.split('::');
+    if (coachId && playerId) {
+      this.loadMessagesForConversation(coachId, playerId).then(messages => {
+        callback(messages);
+      });
+    }
 
     // Return unsubscribe function
     return () => {
-      const sessionListeners = this.listeners.get(sessionId);
-      if (sessionListeners) {
-        sessionListeners.delete(callback);
-        if (sessionListeners.size === 0) {
-          this.listeners.delete(sessionId);
+      const conversationListeners = this.listeners.get(conversationKey);
+      if (conversationListeners) {
+        conversationListeners.delete(callback);
+        if (conversationListeners.size === 0) {
+          this.listeners.delete(conversationKey);
         }
       }
     };
   }
 
-  private notifyListeners(sessionId: string, messages: Message[]): void {
-    const listeners = this.listeners.get(sessionId);
+  private notifyListeners(conversationKey: string, messages: Message[]): void {
+    const listeners = this.listeners.get(conversationKey);
     if (listeners) {
       listeners.forEach(callback => callback(messages));
     }
   }
 
   // Polling mechanism (fallback if real-time doesn't work)
-  startPolling(sessionId: string, callback: (messages: Message[]) => void, interval = 2000): () => void {
+  startPolling(conversationKey: string, callback: (messages: Message[]) => void, interval = 2000): () => void {
+    const [coachId, playerId] = conversationKey.split('::');
+    if (!coachId || !playerId) {
+      console.error('Invalid conversation key format');
+      return () => {};
+    }
+
     const poll = async () => {
-      const messages = await this.getMessages(sessionId);
+      const messages = await this.getMessagesForConversation(coachId, playerId);
       callback(messages);
     };
 
@@ -719,9 +403,9 @@ class CommunicationService {
     });
     this.realtimeSubscriptions.clear();
     this.listeners.clear();
-    this.sessionsListeners.clear();
   }
 }
 
 // Singleton instance
 export const communicationService = new CommunicationService();
+

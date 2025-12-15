@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChatInterface } from './ChatInterface';
-import { SessionHeader } from './SessionHeader';
-import { SessionList } from './SessionList';
-import { Session, Message, MessageType, User, UserRole } from '../types';
+import { Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
 import { createUserWithToken } from '../services/authService';
-import { Plus, Users, ChevronDown, Trash2, X, Check, RotateCcw } from 'lucide-react';
+import { Plus, Users, ChevronDown, Trash2, X, Check } from 'lucide-react';
 import sequenceLogo from '../Sequence.png';
 
 interface AdminInterfaceProps {
@@ -25,8 +23,6 @@ const getInitials = (name: string): string => {
 };
 
 export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) => {
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [players, setPlayers] = useState<User[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -36,99 +32,38 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
 
-  // Load sessions and players on mount
+  // Load players on mount
   useEffect(() => {
     communicationService.setCurrentUserId(currentUser.id);
     loadPlayers();
     
-    // Subscribe to real-time sessions updates
-    const unsubscribeSessions = communicationService.subscribeToSessions((newSessions) => {
-      setSessions(newSessions);
-      
-      // If active session no longer exists, clear it
-      if (activeSessionId && !newSessions.find(s => s.id === activeSessionId)) {
-        setActiveSessionId(null);
-      }
-    });
-
-    // Poll for players
+    // Poll for players periodically
     const interval = setInterval(() => {
       loadPlayers();
     }, 10000);
     
     return () => {
-      unsubscribeSessions();
       clearInterval(interval);
     };
-  }, [currentUser, activeSessionId]);
+  }, [currentUser]);
 
-  // Auto-create or find default session when player is selected
+  // Load messages when player is selected
   useEffect(() => {
     if (!selectedPlayerId) {
-      // Don't clear activeSessionId here - allow sessions to be selected from sidebar
-      return;
-    }
-
-    const ensureDefaultSession = async () => {
-      // Find existing session for this player where we're the coach
-      const existingSession = sessions.find(session => 
-        session.playerIds && session.playerIds.includes(selectedPlayerId) &&
-        session.coachId === currentUser.id
-      );
-
-      if (existingSession) {
-        setActiveSessionId(existingSession.id);
-      } else {
-        // Check if there's an unassigned session for this player
-        const unassignedSession = sessions.find(session => 
-          session.playerIds && session.playerIds.includes(selectedPlayerId) &&
-          (!session.coachId || session.coachId === '')
-        );
-
-        if (unassignedSession) {
-          // Assign ourselves as coach to this existing session
-          await communicationService.updateSession(unassignedSession.id, {
-            coachId: currentUser.id
-          });
-          setActiveSessionId(unassignedSession.id);
-        } else {
-          // Create a new default session
-          const sessionId = crypto.randomUUID();
-          const newSession: Session = {
-            id: sessionId,
-            title: 'Chat',
-            date: new Date(),
-            status: 'active',
-            coachId: currentUser.id,
-            playerIds: [selectedPlayerId],
-            tags: []
-          };
-
-          await communicationService.createSession(newSession);
-          setActiveSessionId(sessionId);
-        }
-      }
-    };
-
-    ensureDefaultSession();
-  }, [selectedPlayerId, sessions, currentUser.id]);
-
-  // Load messages when session changes
-  useEffect(() => {
-    if (!activeSessionId) {
       setMessages([]);
       return;
     }
 
-    loadMessages(activeSessionId);
+    loadMessages(currentUser.id, selectedPlayerId);
     
     // Subscribe to real-time updates
-    const unsubscribe = communicationService.subscribe(activeSessionId, (newMessages) => {
+    const conversationKey = `${currentUser.id}::${selectedPlayerId}`;
+    const unsubscribe = communicationService.subscribe(conversationKey, (newMessages) => {
       setMessages(newMessages);
     });
 
-    // Also poll for cross-tab updates
-    const stopPolling = communicationService.startPolling(activeSessionId, (newMessages) => {
+    // Also poll for cross-tab updates (fallback)
+    const stopPolling = communicationService.startPolling(conversationKey, (newMessages) => {
       setMessages(newMessages);
     });
 
@@ -136,11 +71,11 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       unsubscribe();
       stopPolling();
     };
-  }, [activeSessionId]);
+  }, [selectedPlayerId, currentUser.id]);
 
-  const loadMessages = async (sessionId: string) => {
-    const sessionMessages = await communicationService.getMessages(sessionId);
-    setMessages(sessionMessages);
+  const loadMessages = async (coachId: string, playerId: string) => {
+    const conversationMessages = await communicationService.getMessagesForConversation(coachId, playerId);
+    setMessages(conversationMessages);
   };
 
   const loadPlayers = async () => {
@@ -176,11 +111,12 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   };
 
   const handleSendMessage = async (content: string, type: MessageType, metadata?: Message['metadata']) => {
-    if (!activeSessionId) return;
+    if (!selectedPlayerId) return;
 
     const newMessage: Message = {
       id: crypto.randomUUID(),
-      sessionId: activeSessionId,
+      coachId: currentUser.id,
+      playerId: selectedPlayerId,
       senderId: currentUser.id,
       type,
       content,
@@ -188,12 +124,22 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       metadata,
     };
 
-    await communicationService.sendMessage(activeSessionId, newMessage);
+    // Optimistic update - add message to UI immediately
+    setMessages(prev => [...prev, newMessage]);
+
+    try {
+      await communicationService.sendMessage(currentUser.id, selectedPlayerId, newMessage);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      // Remove the optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== newMessage.id));
+      alert('Failed to send message. Please try again.');
+    }
   };
 
   const handleUpdateMessage = async (messageId: string, updates: Partial<Message>) => {
-    if (!activeSessionId) return;
-    await communicationService.updateMessage(activeSessionId, messageId, updates);
+    if (!selectedPlayerId) return;
+    await communicationService.updateMessage(currentUser.id, selectedPlayerId, messageId, updates);
   };
 
   const handleDeletePlayer = async (playerId: string) => {
@@ -202,14 +148,12 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       // If the deleted player was selected, clear the selection
       if (selectedPlayerId === playerId) {
         setSelectedPlayerId(null);
-        setActiveSessionId(null);
       }
       // Reload players to reflect deletion
       await loadPlayers();
       setShowDeletePlayerConfirm(null);
     } catch (error) {
       console.error('Failed to delete player:', error);
-      // Keep the confirmation state so user can try again
       alert('Failed to delete player. Please check the console for details.');
     }
   };
@@ -224,78 +168,14 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     }
   };
 
-  const handleDeleteSession = async (sessionId: string) => {
-    try {
-      // Delete for all participants
-      await communicationService.deleteSessionForAll(sessionId, currentUser.id);
-      // If the deleted session was active, clear it
-      if (activeSessionId === sessionId) {
-        setActiveSessionId(null);
-      }
-    } catch (error) {
-      console.error('Failed to delete session:', error);
-      alert('Failed to delete session. Please check the console for details.');
-    }
-  };
-
-  const handleRestoreSession = async (sessionId: string) => {
-    try {
-      // Restore for all participants
-      await communicationService.restoreSessionForAll(sessionId);
-    } catch (error) {
-      console.error('Failed to restore session:', error);
-      alert('Failed to restore session. Please check the console for details.');
-    }
-  };
-
-  // Handler for manual session selection from sidebar
-  const handleSelectSession = async (sessionId: string) => {
-    const selectedSession = sessions.find(s => s.id === sessionId);
-    
-    if (selectedSession) {
-      // If session has no coach, assign ourselves
-      if (!selectedSession.coachId || selectedSession.coachId === '') {
-        await communicationService.updateSession(sessionId, {
-          coachId: currentUser.id
-        });
-      }
-      
-      // If session has players, select the first player
-      if (selectedSession.playerIds && selectedSession.playerIds.length > 0) {
-        setSelectedPlayerId(selectedSession.playerIds[0]);
-      }
-      
-      setActiveSessionId(sessionId);
-    }
-  };
-
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-  const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
-
   const selectedPlayer = players.find(p => p.id === selectedPlayerId);
-  
-  // Get player name from session if no player selected from dropdown
-  const getOtherUserName = (): string => {
-    if (selectedPlayer) {
-      return selectedPlayer.name;
-    }
-    if (activeSession && activeSession.playerIds && activeSession.playerIds.length > 0) {
-      // Try to find player name from players list
-      const sessionPlayer = players.find(p => activeSession.playerIds.includes(p.id));
-      if (sessionPlayer) {
-        return sessionPlayer.name;
-      }
-      return 'Player';
-    }
-    return 'User';
-  };
 
   return (
     <div className="flex flex-col h-screen w-full bg-black overflow-hidden font-sans text-white">
       {/* Top Navigation */}
-      <div className="h-14 sm:h-16 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-4 sticky top-0 z-30">
+      <div className="h-14 sm:h-16 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center px-3 sm:px-4 sticky top-0 z-30">
         {/* Left: Admin Panel Branding */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <img 
             src={sequenceLogo} 
             alt="Sequence" 
@@ -306,7 +186,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
           </div>
         </div>
 
-        {/* Center/Right: Player Selector */}
+        {/* Right: Player Selector */}
         <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end">
           {/* Player Dropdown */}
           <div className="relative">
@@ -485,44 +365,25 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
 
       {/* Main Content */}
       <div className="flex-1 flex min-w-0 w-full bg-black relative z-0 overflow-hidden">
-        {/* SessionList sidebar */}
-        <div className="hidden md:flex w-64 border-r border-white/5 bg-black/40 flex-shrink-0">
-          <SessionList
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={handleSelectSession}
-            messages={messages}
-            onDeleteSession={handleDeleteSession}
-            currentUserId={currentUser.id}
-          />
-        </div>
-
         {/* Main chat area */}
         <div className="flex-1 flex flex-col min-w-0 w-full bg-black relative z-0 overflow-hidden">
-          {activeSession ? (
-            <>
-              <SessionHeader 
-                session={activeSession} 
-                coach={currentUser}
-                onBackMobile={() => {}}
+          {selectedPlayer ? (
+            <div className="flex-1 overflow-hidden relative">
+              <ChatInterface 
+                messages={messages}
+                currentUser={currentUser}
+                onSendMessage={handleSendMessage}
+                onUpdateMessage={handleUpdateMessage}
+                otherUserName={selectedPlayer.name}
               />
-              <div className="flex-1 overflow-hidden relative">
-                <ChatInterface 
-                  messages={activeMessages}
-                  currentUser={currentUser}
-                  onSendMessage={handleSendMessage}
-                  onUpdateMessage={handleUpdateMessage}
-                  otherUserName={getOtherUserName()}
-                />
-              </div>
-            </>
+            </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-sequence-muted p-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-sequence-card flex items-center justify-center mb-4 border border-sequence-border">
                 <Users className="w-8 h-8 opacity-50" />
               </div>
               <h3 className="text-lg font-medium text-white mb-2">Select a Player</h3>
-              <p className="max-w-xs">Choose a player from the dropdown above or select a session from the sidebar to start chatting.</p>
+              <p className="max-w-xs">Choose a player from the dropdown above to start chatting.</p>
             </div>
           )}
         </div>
