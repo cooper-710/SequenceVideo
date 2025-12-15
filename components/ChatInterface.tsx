@@ -43,6 +43,7 @@ const getInitials = (name: string): string => {
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentUser, onSendMessage, onUpdateMessage, otherUserName = 'Admin' }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldScrollRef = useRef<boolean>(false);
   const [inputValue, setInputValue] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -56,6 +57,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
 
 
   const handleSend = async () => {
+    // Mark that we should scroll when the new message arrives
+    shouldScrollRef.current = true;
+    
     // If there's a pending attachment, send it (with optional text)
     if (pendingAttachment) {
       const messageType = pendingAttachment.type === 'video' ? MessageType.VIDEO : MessageType.AUDIO;
@@ -382,6 +386,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
     const secs = Math.floor(seconds % 60);
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
+
+  // Auto-scroll to bottom only when messages are sent
+  useEffect(() => {
+    if (shouldScrollRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      shouldScrollRef.current = false;
+    }
+  }, [messages]);
 
   // Cleanup on unmount
   useEffect(() => {
