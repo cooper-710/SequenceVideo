@@ -1624,26 +1624,44 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   e.stopPropagation();
                   // On mobile, if not fullscreen, go fullscreen first, then enter annotation mode
                   const isMobile = window.innerWidth < 768;
-                  if (isMobile && !isFullscreen) {
-                    if (containerRef.current) {
-                      try {
-                        if (containerRef.current.requestFullscreen) {
-                          await containerRef.current.requestFullscreen();
-                        } else if ((containerRef.current as any).webkitRequestFullscreen) {
-                          await (containerRef.current as any).webkitRequestFullscreen();
-                        } else if ((containerRef.current as any).mozRequestFullScreen) {
-                          await (containerRef.current as any).mozRequestFullScreen();
-                        } else if ((containerRef.current as any).msRequestFullscreen) {
-                          await (containerRef.current as any).msRequestFullscreen();
-                        }
-                        // Wait a bit for fullscreen to activate, then enter annotation mode
+                  if (isMobile && !isFullscreen && containerRef.current) {
+                    try {
+                      // Try to enter fullscreen
+                      let fullscreenPromise: Promise<void> | null = null;
+                      const element = containerRef.current;
+                      
+                      if (element.requestFullscreen) {
+                        fullscreenPromise = element.requestFullscreen();
+                      } else if ((element as any).webkitRequestFullscreen) {
+                        fullscreenPromise = (element as any).webkitRequestFullscreen();
+                      } else if ((element as any).mozRequestFullScreen) {
+                        fullscreenPromise = (element as any).mozRequestFullScreen();
+                      } else if ((element as any).msRequestFullscreen) {
+                        fullscreenPromise = (element as any).msRequestFullscreen();
+                      }
+                      
+                      if (fullscreenPromise) {
+                        await fullscreenPromise;
+                        // Update state manually since fullscreen event might be delayed
+                        setIsFullscreen(true);
+                        // Wait a bit for fullscreen to fully activate, then enter annotation mode
+                        setTimeout(() => {
+                          enterAnnotationMode();
+                        }, 200);
+                      } else {
+                        // Fallback: use CSS fullscreen and enter annotation mode
+                        setIsFullscreen(true);
                         setTimeout(() => {
                           enterAnnotationMode();
                         }, 100);
-                      } catch (error) {
-                        // If fullscreen fails, just enter annotation mode
-                        enterAnnotationMode();
                       }
+                    } catch (error) {
+                      console.error('Error entering fullscreen:', error);
+                      // If fullscreen fails, use CSS fullscreen and enter annotation mode
+                      setIsFullscreen(true);
+                      setTimeout(() => {
+                        enterAnnotationMode();
+                      }, 100);
                     }
                   } else {
                     // On desktop or already fullscreen, just enter annotation mode
