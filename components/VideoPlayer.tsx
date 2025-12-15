@@ -1312,21 +1312,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Annotation UI (Drawing Mode) */}
       {isAnnotating && (
         <>
-          {/* Exit Fullscreen Button (Mobile Only) */}
-          {isFullscreen && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleFullscreen();
-              }}
-              className="md:hidden absolute top-2 right-2 sm:top-3 sm:right-3 z-40 p-2 sm:p-2.5 rounded-full bg-[#121212]/95 backdrop-blur-xl border border-white/10 text-white hover:bg-white/10 transition-all duration-300 touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center shadow-lg active:scale-95"
-              title="Exit fullscreen"
-            >
-              <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2} />
-            </button>
-          )}
-
           {/* Left Sidebar - Undo/Redo/Clear */}
           <div className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 sm:gap-2 z-30">
             <button
