@@ -56,10 +56,11 @@ export const getPlayerByName = async (playerName: string): Promise<User | null> 
   }
 
   try {
+    // Use case-insensitive matching for player names
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('name', decodedName)
+      .ilike('name', decodedName)
       .eq('role', UserRole.PLAYER)
       .limit(1);
 

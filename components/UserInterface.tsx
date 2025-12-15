@@ -14,49 +14,38 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [hasManuallySelected, setHasManuallySelected] = useState(false);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [coachUser, setCoachUser] = useState<User | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load sessions on mount and auto-select/create default session
+  // Initialize communication service and load sessions
   useEffect(() => {
     communicationService.setCurrentUserId(currentUser.id);
     
     // Subscribe to real-time sessions updates
     const unsubscribeSessions = communicationService.subscribeToSessions((newSessions) => {
-      // Filter sessions to only show those that include current user
+      // Filter sessions to only show those that include current user as a player
       const userSessions = newSessions.filter(session => 
         session.playerIds && session.playerIds.includes(currentUser.id)
       );
       
       setSessions(userSessions);
       
-      // If active session no longer exists, clear it (but don't auto-select if user manually selected)
+      // If active session no longer exists, clear it
       if (activeSessionId && !userSessions.find(s => s.id === activeSessionId)) {
-        // Only clear if user hasn't manually selected, otherwise keep it null
-        if (!hasManuallySelected) {
-          setActiveSessionId(null);
-        } else {
-          // If manually selected session is deleted, clear it
-          setActiveSessionId(null);
-          setHasManuallySelected(false);
-        }
+        setActiveSessionId(null);
       }
     });
     
     return () => {
       unsubscribeSessions();
     };
-  }, [currentUser, activeSessionId, hasManuallySelected]);
+  }, [currentUser.id, activeSessionId]);
 
-  // Auto-create or find default session on mount (only once)
+  // Auto-select the most relevant session on mount
   useEffect(() => {
-    // Only auto-select if user hasn't manually selected a session AND we haven't initialized yet
-    if (hasManuallySelected || hasInitialized) return;
-    
-    // Wait for sessions to load
-    if (sessions.length === 0) return;
+    if (isInitialized || sessions.length === 0) return;
 
-    const ensureDefaultSession = async () => {
+    const selectBestSession = async () => {
       // Prioritize sessions with a coach assigned (active admin sessions)
       // Sort: sessions with coach first, then by date (most recent first)
       const sortedSessions = [...sessions].sort((a, b) => {
@@ -71,19 +60,20 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
         return b.date.getTime() - a.date.getTime();
       });
 
-      // Find existing session for this user (prioritizing those with coaches)
-      const existingSession = sortedSessions.find(session => 
-        session.playerIds && session.playerIds.includes(currentUser.id)
-      );
-
-      if (existingSession) {
-        // Only set if we don't already have this session selected
-        if (activeSessionId !== existingSession.id) {
-          setActiveSessionId(existingSession.id);
+      // Select the first session (best match)
+      if (sortedSessions.length > 0) {
+        const bestSession = sortedSessions[0];
+        setActiveSessionId(bestSession.id);
+        
+        // Load coach user if session has a coach
+        if (bestSession.coachId) {
+          const coach = await communicationService.getPlayer(bestSession.coachId);
+          if (coach) {
+            setCoachUser(coach);
+          }
         }
-        setHasInitialized(true);
       } else {
-        // Only create a default session if user has no sessions at all
+        // No sessions exist - create a default one
         const sessionId = crypto.randomUUID();
         const newSession: Session = {
           id: sessionId,
@@ -97,12 +87,13 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
 
         await communicationService.createSession(newSession);
         setActiveSessionId(sessionId);
-        setHasInitialized(true);
       }
+      
+      setIsInitialized(true);
     };
 
-    ensureDefaultSession();
-  }, [sessions, currentUser.id, activeSessionId, hasManuallySelected, hasInitialized]);
+    selectBestSession();
+  }, [sessions, currentUser.id, isInitialized]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -128,6 +119,36 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
       stopPolling();
     };
   }, [activeSessionId]);
+
+  // Update coach user when active session changes
+  useEffect(() => {
+    const updateCoachUser = async () => {
+      if (!activeSessionId) {
+        setCoachUser(null);
+        return;
+      }
+
+      const activeSession = sessions.find(s => s.id === activeSessionId);
+      if (activeSession && activeSession.coachId) {
+        const coach = await communicationService.getPlayer(activeSession.coachId);
+        if (coach) {
+          setCoachUser(coach);
+        } else {
+          // Fallback: create a default coach user object
+          setCoachUser({
+            id: activeSession.coachId,
+            name: 'Admin',
+            role: UserRole.COACH,
+            avatarUrl: ''
+          });
+        }
+      } else {
+        setCoachUser(null);
+      }
+    };
+
+    updateCoachUser();
+  }, [activeSessionId, sessions]);
 
   const loadMessages = async (sessionId: string) => {
     const sessionMessages = await communicationService.getMessages(sessionId);
@@ -156,22 +177,41 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   };
 
   // Handler for manual session selection
-  const handleSelectSession = (sessionId: string) => {
-    setHasManuallySelected(true);
-    setHasInitialized(true); // Also mark as initialized to prevent auto-selection
+  const handleSelectSession = async (sessionId: string) => {
     setActiveSessionId(sessionId);
+    
+    // Load coach user for the selected session
+    const selectedSession = sessions.find(s => s.id === sessionId);
+    if (selectedSession && selectedSession.coachId) {
+      const coach = await communicationService.getPlayer(selectedSession.coachId);
+      if (coach) {
+        setCoachUser(coach);
+      } else {
+        setCoachUser({
+          id: selectedSession.coachId,
+          name: 'Admin',
+          role: UserRole.COACH,
+          avatarUrl: ''
+        });
+      }
+    } else {
+      setCoachUser(null);
+    }
   };
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
       // Delete for all participants
       await communicationService.deleteSessionForAll(sessionId, currentUser.id);
+      // If the deleted session was active, clear it
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(null);
+      }
     } catch (error) {
       console.error('Failed to delete session:', error);
       alert('Failed to delete session. Please check the console for details.');
     }
   };
-
 
   const activeSession = useMemo(() => {
     if (!activeSessionId || !sessions.length) return undefined;
@@ -180,34 +220,13 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
   
   const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
 
-  // Get coach user for header (first admin/coach found in messages, or default)
-  const getCoachUser = (): User => {
-    if (!currentUser) {
-      return {
-        id: 'admin',
-        name: 'Admin',
-        role: UserRole.COACH,
-        avatarUrl: ''
-      };
-    }
-    const coachMessage = messages.find(m => m.senderId !== currentUser.id);
-    if (coachMessage) {
-      // In a real app, you'd fetch the user by ID
-      return {
-        id: coachMessage.senderId,
-        name: 'Admin',
-        role: UserRole.COACH,
-        avatarUrl: ''
-      };
-    }
-    return {
-      id: 'admin',
-      name: 'Admin',
-      role: UserRole.COACH,
-      avatarUrl: ''
-    };
+  // Default coach user for display
+  const displayCoach = coachUser || {
+    id: 'admin',
+    name: 'Admin',
+    role: UserRole.COACH,
+    avatarUrl: ''
   };
-
 
   return (
     <div className="flex flex-col h-screen w-full bg-black overflow-hidden font-sans text-white">
@@ -246,7 +265,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
             <>
               <SessionHeader 
                 session={activeSession} 
-                coach={getCoachUser()}
+                coach={displayCoach}
                 onBackMobile={() => {}}
               />
               <div className="flex-1 overflow-hidden relative">
@@ -255,7 +274,7 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
                   currentUser={currentUser}
                   onSendMessage={handleSendMessage}
                   onUpdateMessage={handleUpdateMessage}
-                  otherUserName="Admin"
+                  otherUserName={displayCoach.name}
                 />
               </div>
             </>
@@ -273,4 +292,3 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
     </div>
   );
 };
-
