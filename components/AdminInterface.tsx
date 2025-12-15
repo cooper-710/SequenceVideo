@@ -65,12 +65,12 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
   // Auto-create or find default session when player is selected
   useEffect(() => {
     if (!selectedPlayerId) {
-      setActiveSessionId(null);
+      // Don't clear activeSessionId here - allow sessions to be selected from sidebar
       return;
     }
 
     const ensureDefaultSession = async () => {
-      // Find existing session for this player
+      // Find existing session for this player where we're the coach
       const existingSession = sessions.find(session => 
         session.playerIds && session.playerIds.includes(selectedPlayerId) &&
         session.coachId === currentUser.id
@@ -79,20 +79,34 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
       if (existingSession) {
         setActiveSessionId(existingSession.id);
       } else {
-        // Create a default session
-        const sessionId = crypto.randomUUID();
-        const newSession: Session = {
-          id: sessionId,
-          title: 'Chat',
-          date: new Date(),
-          status: 'active',
-          coachId: currentUser.id,
-          playerIds: [selectedPlayerId],
-          tags: []
-        };
+        // Check if there's an unassigned session for this player
+        const unassignedSession = sessions.find(session => 
+          session.playerIds && session.playerIds.includes(selectedPlayerId) &&
+          (!session.coachId || session.coachId === '')
+        );
 
-        await communicationService.createSession(newSession);
-        setActiveSessionId(sessionId);
+        if (unassignedSession) {
+          // Assign ourselves as coach to this existing session
+          await communicationService.updateSession(unassignedSession.id, {
+            coachId: currentUser.id
+          });
+          setActiveSessionId(unassignedSession.id);
+        } else {
+          // Create a new default session
+          const sessionId = crypto.randomUUID();
+          const newSession: Session = {
+            id: sessionId,
+            title: 'Chat',
+            date: new Date(),
+            status: 'active',
+            coachId: currentUser.id,
+            playerIds: [selectedPlayerId],
+            tags: []
+          };
+
+          await communicationService.createSession(newSession);
+          setActiveSessionId(sessionId);
+        }
       }
     };
 
@@ -234,10 +248,47 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
     }
   };
 
+  // Handler for manual session selection from sidebar
+  const handleSelectSession = async (sessionId: string) => {
+    const selectedSession = sessions.find(s => s.id === sessionId);
+    
+    if (selectedSession) {
+      // If session has no coach, assign ourselves
+      if (!selectedSession.coachId || selectedSession.coachId === '') {
+        await communicationService.updateSession(sessionId, {
+          coachId: currentUser.id
+        });
+      }
+      
+      // If session has players, select the first player
+      if (selectedSession.playerIds && selectedSession.playerIds.length > 0) {
+        setSelectedPlayerId(selectedSession.playerIds[0]);
+      }
+      
+      setActiveSessionId(sessionId);
+    }
+  };
+
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const activeMessages = messages.filter(m => m.sessionId === activeSessionId);
 
   const selectedPlayer = players.find(p => p.id === selectedPlayerId);
+  
+  // Get player name from session if no player selected from dropdown
+  const getOtherUserName = (): string => {
+    if (selectedPlayer) {
+      return selectedPlayer.name;
+    }
+    if (activeSession && activeSession.playerIds && activeSession.playerIds.length > 0) {
+      // Try to find player name from players list
+      const sessionPlayer = players.find(p => activeSession.playerIds.includes(p.id));
+      if (sessionPlayer) {
+        return sessionPlayer.name;
+      }
+      return 'Player';
+    }
+    return 'User';
+  };
 
   return (
     <div className="flex flex-col h-screen w-full bg-black overflow-hidden font-sans text-white">
@@ -439,7 +490,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
           <SessionList
             sessions={sessions}
             activeSessionId={activeSessionId}
-            onSelectSession={setActiveSessionId}
+            onSelectSession={handleSelectSession}
             messages={messages}
             onDeleteSession={handleDeleteSession}
             currentUserId={currentUser.id}
@@ -448,7 +499,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
 
         {/* Main chat area */}
         <div className="flex-1 flex flex-col min-w-0 w-full bg-black relative z-0 overflow-hidden">
-          {activeSession && selectedPlayerId ? (
+          {activeSession ? (
             <>
               <SessionHeader 
                 session={activeSession} 
@@ -461,7 +512,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                   currentUser={currentUser}
                   onSendMessage={handleSendMessage}
                   onUpdateMessage={handleUpdateMessage}
-                  otherUserName={selectedPlayer?.name || 'User'}
+                  otherUserName={getOtherUserName()}
                 />
               </div>
             </>
@@ -471,7 +522,7 @@ export const AdminInterface: React.FC<AdminInterfaceProps> = ({ currentUser }) =
                 <Users className="w-8 h-8 opacity-50" />
               </div>
               <h3 className="text-lg font-medium text-white mb-2">Select a Player</h3>
-              <p className="max-w-xs">Choose a player from the dropdown above to start chatting.</p>
+              <p className="max-w-xs">Choose a player from the dropdown above or select a session from the sidebar to start chatting.</p>
             </div>
           )}
         </div>
