@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { ChatInterface } from './ChatInterface';
 import { Message, MessageType, User, UserRole } from '../types';
 import { communicationService } from '../services/communicationService';
-import sequenceLogo from '../Sequence.png';
 
 interface UserInterfaceProps {
   currentUser: User;
@@ -122,21 +121,6 @@ export const UserInterface: React.FC<UserInterfaceProps> = ({ currentUser }) => 
 
   return (
     <div className="flex flex-col h-screen w-full bg-black overflow-hidden font-sans text-white">
-      {/* Top Navigation */}
-      <div className="h-14 sm:h-16 border-b border-white/5 bg-black/80 backdrop-blur-xl flex items-center justify-between px-3 sm:px-4 sticky top-0 z-30">
-        {/* Left: Branding */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <img 
-            src={sequenceLogo} 
-            alt="Sequence" 
-            className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
-          />
-          <div className="hidden sm:block">
-            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">{currentUser.name}</h2>
-          </div>
-        </div>
-      </div>
-
       {/* Main Content */}
       <div className="flex-1 flex min-w-0 w-full bg-black relative z-0 overflow-hidden">
         {/* Main chat area */}

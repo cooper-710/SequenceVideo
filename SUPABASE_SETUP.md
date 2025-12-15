@@ -25,6 +25,44 @@ This app uses Supabase for multi-user support with link-based authentication. Fo
    - `session_players`
    - `user_session_deletions`
 
+## 2.5. Set Up Storage Bucket for Videos
+
+1. In your Supabase dashboard, go to **Storage**
+2. Click **Create a new bucket**
+3. Fill in:
+   - **Name**: `videos`
+   - **Public bucket**: ✅ **Enable** (check this box so videos can be accessed via public URLs)
+4. Click **Create bucket**
+5. Go to **Policies** tab for the `videos` bucket
+6. Click **New Policy** → **For full customization**
+7. Create a policy to allow public uploads (since this app uses link-based auth, not Supabase Auth):
+   - **Policy name**: `Allow public uploads`
+   - **Allowed operation**: `INSERT`
+   - **Policy definition**:
+     ```sql
+     bucket_id = 'videos'::text
+     ```
+8. Create another policy to allow public reads:
+   - **Policy name**: `Allow public reads`
+   - **Allowed operation**: `SELECT`
+   - **Policy definition**:
+     ```sql
+     bucket_id = 'videos'::text
+     ```
+9. (Optional) Create a policy to allow public deletes:
+   - **Policy name**: `Allow public deletes`
+   - **Allowed operation**: `DELETE`
+   - **Policy definition**:
+     ```sql
+     bucket_id = 'videos'::text
+     ```
+
+**Note**: Since this app uses link-based authentication (not Supabase Auth), we're making the bucket public for simplicity. For production, consider:
+- Using Supabase Edge Functions to handle uploads with additional validation
+- Implementing file size limits
+- Adding rate limiting
+- Using signed URLs for temporary access
+
 ## 3. Get Your API Keys
 
 1. In Supabase dashboard, go to **Settings** → **API**

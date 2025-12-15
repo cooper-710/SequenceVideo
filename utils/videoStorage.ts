@@ -1,13 +1,23 @@
 /**
- * Video storage utility using IndexedDB for large files
- * Falls back to data URLs for small files
+ * Video storage utility using Supabase Storage for persistence
+ * Falls back to IndexedDB for local caching, then data URLs for small files
  */
+
+import { supabase } from '../services/supabaseClient';
 
 const DB_NAME = 'sequence_video_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'videos';
+const STORAGE_BUCKET = 'videos'; // Supabase Storage bucket name
 
 let dbInstance: IDBDatabase | null = null;
+
+// Check if Supabase is configured
+const isSupabaseConfigured = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return !!(url && key && !url.includes('placeholder'));
+};
 
 const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -35,8 +45,40 @@ const initDB = (): Promise<IDBDatabase> => {
 
 /**
  * Store a video blob and return a storage key
+ * Priority: Supabase Storage > IndexedDB (for large files) > Data URL (for small files)
  */
 export const storeVideo = async (blob: Blob): Promise<string> => {
+  // Try Supabase Storage first if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const fileName = `video_${Date.now()}_${Math.random().toString(36).substring(7)}.${blob.type.includes('webm') ? 'webm' : blob.type.includes('mp4') ? 'mp4' : 'mp4'}`;
+      
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(fileName, blob, {
+          contentType: blob.type || 'video/mp4',
+          upsert: false
+        });
+
+      if (error) {
+        console.warn('Error uploading to Supabase Storage:', error);
+        // Fall through to local storage
+      } else {
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(fileName);
+        
+        if (urlData?.publicUrl) {
+          return `supabase:${urlData.publicUrl}`;
+        }
+      }
+    } catch (error) {
+      console.warn('Error uploading to Supabase Storage:', error);
+      // Fall through to local storage
+    }
+  }
+
   // For small files (< 2MB), use data URL
   const TWO_MB = 2 * 1024 * 1024;
   if (blob.size < TWO_MB) {
@@ -48,7 +90,7 @@ export const storeVideo = async (blob: Blob): Promise<string> => {
     });
   }
 
-  // For large files, use IndexedDB
+  // For large files, use IndexedDB as fallback
   try {
     const db = await initDB();
     const key = `video_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -104,6 +146,12 @@ export const getVideo = async (storageKey: string): Promise<string> => {
     return storageKey;
   }
 
+  // If it's a Supabase Storage URL, return it directly
+  if (storageKey.startsWith('supabase:')) {
+    const url = storageKey.replace('supabase:', '');
+    return url;
+  }
+
   // If it's a blob URL, check if it's still valid
   if (storageKey.startsWith('blob:')) {
     const isValid = await isBlobUrlValid(storageKey);
@@ -144,7 +192,7 @@ export const getVideo = async (storageKey: string): Promise<string> => {
     }
   }
 
-  // Unknown format, return as-is (might be an external URL)
+  // Unknown format, return as-is (might be an external URL or Supabase URL)
   return storageKey;
 };
 
@@ -152,27 +200,47 @@ export const getVideo = async (storageKey: string): Promise<string> => {
  * Delete a video from storage
  */
 export const deleteVideo = async (storageKey: string): Promise<void> => {
-  if (!storageKey.startsWith('indexeddb:')) {
-    // Data URLs and blob URLs don't need explicit deletion
-    if (storageKey.startsWith('blob:')) {
-      URL.revokeObjectURL(storageKey);
+  // Delete from Supabase Storage if applicable
+  if (storageKey.startsWith('supabase:') && isSupabaseConfigured()) {
+    try {
+      const url = storageKey.replace('supabase:', '');
+      // Extract file path from URL
+      const urlParts = url.split('/');
+      const fileName = urlParts[urlParts.length - 1];
+      
+      const { error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .remove([fileName]);
+      
+      if (error) {
+        console.warn('Error deleting from Supabase Storage:', error);
+      }
+    } catch (error) {
+      console.warn('Error deleting from Supabase Storage:', error);
     }
-    return;
   }
 
-  const key = storageKey.replace('indexeddb:', '');
-  try {
-    const db = await initDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.delete(key);
-      
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error('Error deleting video from IndexedDB:', error);
+  // Delete from IndexedDB if applicable
+  if (storageKey.startsWith('indexeddb:')) {
+    const key = storageKey.replace('indexeddb:', '');
+    try {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete(key);
+        
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Error deleting video from IndexedDB:', error);
+    }
+  }
+
+  // Data URLs and blob URLs don't need explicit deletion
+  if (storageKey.startsWith('blob:')) {
+    URL.revokeObjectURL(storageKey);
   }
 };
 
