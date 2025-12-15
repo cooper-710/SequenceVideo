@@ -36,14 +36,34 @@
         -webkit-touch-callout: none;
       }
       
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      
+      #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      
       body {
         background-color: #000000;
         color: #E5E5E5;
         overscroll-behavior: none;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        /* Safe area insets for iOS */
+        /* Safe area insets for iOS - only apply when not in iframe */
         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      
+      /* Remove safe-area padding when in iframe */
+      body.in-iframe {
+        padding: 0 !important;
       }
       
       /* Custom scrollbar for dark theme */
@@ -116,9 +136,15 @@
 }
 </script>
 <link rel="stylesheet" href="/index.css">
-</head>
+  </head>
   <body>
     <div id="root"></div>
+  <script>
+    // Detect if we're in an iframe and remove safe-area padding
+    if (window.self !== window.top) {
+      document.body.classList.add('in-iframe');
+    }
+  </script>
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>

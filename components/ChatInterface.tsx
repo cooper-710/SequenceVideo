@@ -436,9 +436,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
   return (
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 scroll-smooth" ref={scrollRef} style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 pt-0 pb-3 sm:pb-4 md:pb-6 space-y-4 sm:space-y-6 scroll-smooth" ref={scrollRef} style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* Date Divider */}
-        <div className="flex justify-center pt-2 pb-4">
+        <div className="flex justify-center pt-3 pb-4">
           <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest bg-neutral-900/50 px-3 py-1 rounded-full border border-white/5 backdrop-blur-sm">
             Today
           </span>
@@ -547,7 +547,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
       <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 bg-gradient-to-t from-[#050505] via-[#0a0a0a] to-transparent border-t border-white/5 z-30 backdrop-blur-xl" style={{ 
         paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))'
       }}>
-        <div className="max-w-4xl mx-auto w-full px-2 sm:px-0">
+        <div className="max-w-full sm:max-w-2xl md:max-w-4xl mx-auto w-full px-2 sm:px-0">
 
           {/* Pending Attachment Preview - Compact */}
           {pendingAttachment && (
@@ -625,9 +625,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={pendingAttachment ? `Add a message...` : `Type a message to ${otherUserName}...`}
-              className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-32 py-2 min-h-[40px] text-base md:text-sm leading-relaxed"
+              className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none outline-none text-white placeholder-neutral-500 resize-none max-h-32 py-2 min-h-[40px] text-base md:text-sm leading-relaxed"
               rows={1}
-              style={{ height: 'auto', fontSize: '16px' }} 
+              style={{ height: 'auto', fontSize: '16px', outline: 'none' }} 
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 target.style.height = 'auto';
