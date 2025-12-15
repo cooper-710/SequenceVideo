@@ -422,9 +422,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
   }, [isRecording, pendingAttachment]);
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] relative">
+    <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 scroll-smooth" ref={scrollRef}>
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 scroll-smooth pb-20" ref={scrollRef}>
         {/* Date Divider */}
         <div className="flex justify-center py-4">
           <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest bg-neutral-900/50 px-3 py-1 rounded-full border border-white/5 backdrop-blur-sm">
