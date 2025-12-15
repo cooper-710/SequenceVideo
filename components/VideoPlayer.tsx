@@ -1469,8 +1469,62 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Bottom Bar - Save/Cancel */}
+          {/* Bottom Bar - Scrubber and Save/Cancel */}
           <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 sm:gap-2.5 z-30 w-full px-2 sm:px-4 max-w-xl">
+            {/* Timeline Scrubber */}
+            <div 
+              ref={scrubberRef}
+              className="relative w-full h-1.5 sm:h-1 bg-white/20 rounded-full mb-2 sm:mb-3 cursor-pointer group/scrubber hover:h-2 sm:hover:h-1.5 transition-all duration-300 touch-manipulation"
+              onMouseDown={handleScrubberMouseDown}
+              onTouchStart={handleScrubberMouseDown}
+            >
+              <input
+                type="range"
+                min={0}
+                max={duration && duration > 0 ? duration : 100}
+                step={0.001}
+                value={currentTime}
+                disabled={!duration || duration === 0}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  handleSeekStart();
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  handleSeekStart();
+                }}
+                onChange={handleSeek}
+                onInput={handleSeekInput}
+                onMouseUp={(e) => {
+                  e.stopPropagation();
+                  handleSeekEnd();
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  handleSeekEnd();
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
+              />
+              {/* Progress */}
+              <div 
+                className="h-full bg-sequence-orange rounded-full relative" 
+                style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+              >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full scale-0 group-hover/scrubber:scale-100 transition-transform shadow-lg border-2 border-sequence-orange" />
+              </div>
+
+              {/* Annotation Markers */}
+              {annotations.map((ann, idx) => (
+                <div 
+                  key={ann.id || idx}
+                  className="absolute top-1/2 -translate-y-1/2 z-0 group/marker"
+                  style={{ left: `${duration > 0 ? (ann.timestamp / duration) * 100 : 0}%` }}
+                >
+                  <div className="w-2.5 h-2.5 bg-sequence-orange border-2 border-black rounded-full transform transition-transform group-hover/scrubber:scale-125 group-hover/marker:scale-150" />
+                </div>
+              ))}
+            </div>
+
             {/* Action Buttons */}
             <div className="flex gap-2 sm:gap-3 w-full max-w-md justify-center">
               <button 
