@@ -1464,6 +1464,82 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </>
       )}
 
+      {/* Top Right Buttons (Mobile Fullscreen Only) */}
+      {!isAnnotating && isFullscreen && (
+        <div className="md:hidden absolute top-2 right-2 sm:top-3 sm:right-3 z-30 flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {/* Toggle Annotations Button */}
+          {annotations.length > 0 && (
+            <button
+              onClick={() => setShowAnnotations(!showAnnotations)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-full backdrop-blur-md border transition-all duration-300 touch-manipulation min-h-[36px] sm:min-h-[40px] ${
+                showAnnotations
+                  ? 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                  : 'bg-black/40 border-white/10 text-neutral-400 hover:text-white hover:border-white/20'
+              }`}
+              title={showAnnotations ? 'Hide annotations' : 'Show annotations'}
+            >
+              {showAnnotations ? (
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              ) : (
+                <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              )}
+              <span className="text-[10px] sm:text-xs font-medium hidden xs:inline">
+                {showAnnotations ? 'Hide' : 'Show'}
+              </span>
+            </button>
+          )}
+
+          {/* Analyze/Draw Button - Merged with fullscreen on mobile */}
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // On mobile, if not fullscreen, go fullscreen first, then enter annotation mode
+              const isMobile = window.innerWidth < 768;
+              if (isMobile && !isFullscreen) {
+                if (containerRef.current) {
+                  try {
+                    if (containerRef.current.requestFullscreen) {
+                      await containerRef.current.requestFullscreen();
+                    } else if ((containerRef.current as any).webkitRequestFullscreen) {
+                      await (containerRef.current as any).webkitRequestFullscreen();
+                    } else if ((containerRef.current as any).mozRequestFullScreen) {
+                      await (containerRef.current as any).mozRequestFullScreen();
+                    } else if ((containerRef.current as any).msRequestFullscreen) {
+                      await (containerRef.current as any).msRequestFullscreen();
+                    }
+                    // Wait a bit for fullscreen to activate, then enter annotation mode
+                    setTimeout(() => {
+                      enterAnnotationMode();
+                    }, 100);
+                  } catch (error) {
+                    // If fullscreen fails, just enter annotation mode
+                    enterAnnotationMode();
+                  }
+                }
+              } else {
+                // On desktop or already fullscreen, just enter annotation mode
+                enterAnnotationMode();
+              }
+            }}
+            className="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white hover:bg-sequence-orange hover:border-sequence-orange hover:shadow-lg hover:shadow-orange-900/20 transition-all duration-300 group/analyze touch-manipulation min-h-[36px] sm:min-h-[40px] active:scale-95"
+          >
+             {/* On mobile, show fullscreen icon when not fullscreen, otherwise show pencil */}
+             <span className="md:hidden">
+               {!isFullscreen ? (
+                 <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+               ) : (
+                 <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/analyze:animate-bounce" />
+               )}
+             </span>
+             <span className="hidden md:block">
+               <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/analyze:animate-bounce" />
+             </span>
+             <span className="text-xs sm:text-sm font-semibold tracking-wide hidden xs:inline">Draw</span>
+          </button>
+        </div>
+      )}
+
       {/* Playback Controls (Playback Mode) */}
       {!isAnnotating && (
         <div className={`
@@ -1552,8 +1628,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-shrink-0">
-              {/* Toggle Annotations Button */}
+            <div className="hidden md:flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-shrink-0">
+              {/* Toggle Annotations Button - Desktop Only */}
               {annotations.length > 0 && (
                 <button
                   onClick={() => setShowAnnotations(!showAnnotations)}
@@ -1575,7 +1651,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 </button>
               )}
 
-              {/* Analyze Button */}
+              {/* Analyze/Draw Button - Desktop Only */}
               <button
                 onClick={enterAnnotationMode}
                 className="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white hover:bg-sequence-orange hover:border-sequence-orange hover:shadow-lg hover:shadow-orange-900/20 transition-all duration-300 group/analyze touch-manipulation min-h-[36px] sm:min-h-[40px] active:scale-95"
@@ -1584,6 +1660,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                  <span className="text-xs sm:text-sm font-semibold tracking-wide hidden xs:inline">Draw</span>
               </button>
 
+              {/* Fullscreen Button - Desktop Only */}
               <button 
                 onClick={(e) => {
                   e.preventDefault();

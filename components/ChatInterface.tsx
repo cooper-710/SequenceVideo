@@ -535,7 +535,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
       <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 bg-gradient-to-t from-[#050505] via-[#0a0a0a] to-transparent border-t border-white/5 z-30 backdrop-blur-xl" style={{ 
         paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))'
       }}>
-        <div className="max-w-4xl mx-auto w-full">
+        <div className="max-w-4xl mx-auto w-full px-2 sm:px-0">
 
           {/* Pending Attachment Preview - Compact */}
           {pendingAttachment && (
@@ -583,7 +583,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
           )}
 
           {/* Unified Input Bar */}
-          <div className="relative flex items-center gap-1 sm:gap-1.5 bg-[#121212] ring-1 ring-white/10 rounded-xl sm:rounded-2xl p-1 sm:p-1.5 focus-within:ring-sequence-orange/50 focus-within:bg-[#161616] transition-all shadow-xl">
+          <div className="relative flex items-center gap-1 sm:gap-1.5 bg-[#121212] ring-1 ring-white/10 rounded-lg sm:rounded-xl md:rounded-2xl p-1 sm:p-1.5 focus-within:ring-sequence-orange/50 focus-within:bg-[#161616] transition-all shadow-xl">
             {/* Left Side - Video & Voice Buttons */}
             <div className="flex items-center gap-1 flex-shrink-0">
               <label className="cursor-pointer p-2 rounded-xl hover:bg-white/10 transition-all touch-manipulation flex items-center justify-center">
@@ -613,9 +613,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={pendingAttachment ? `Add a message...` : `Type a message to ${otherUserName}...`}
-              className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-32 py-2 min-h-[40px] text-sm leading-relaxed"
+              className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-neutral-500 resize-none max-h-32 py-2 min-h-[40px] text-base md:text-sm leading-relaxed"
               rows={1}
-              style={{ height: 'auto' }} 
+              style={{ height: 'auto', fontSize: '16px' }} 
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 target.style.height = 'auto';
