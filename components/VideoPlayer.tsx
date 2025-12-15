@@ -1151,15 +1151,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }, 100);
   };
 
+  // Check if we're on mobile and in annotation mode
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const shouldEnableScrollbar = isMobile && isFullscreen && isAnnotating;
+
   return (
     <div 
       ref={containerRef} 
       className={`
-        relative bg-black rounded-2xl overflow-hidden border border-white/5 group/video select-none
-        ${isFullscreen ? 'fixed inset-0 z-[100] flex flex-col justify-center bg-black h-screen w-screen rounded-none border-none' : 'aspect-video w-full'}
+        relative bg-black rounded-2xl border border-white/5 group/video select-none
+        ${isFullscreen ? `fixed inset-0 z-[100] flex flex-col bg-black h-screen w-screen rounded-none border-none ${shouldEnableScrollbar ? '' : 'justify-center'}` : 'aspect-video w-full overflow-hidden'}
+        ${shouldEnableScrollbar ? 'overflow-y-auto' : 'overflow-hidden'}
         ${className}
       `}
-      style={isFullscreen ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 } : undefined}
+      style={isFullscreen ? { 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0, 
+        zIndex: 9999,
+        ...(shouldEnableScrollbar ? { paddingBottom: '120px' } : {})
+      } : undefined}
       onDoubleClick={toggleFullscreen}
     >
       {/* Video Layer */}
@@ -1299,6 +1312,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Annotation UI (Drawing Mode) */}
       {isAnnotating && (
         <>
+          {/* Exit Fullscreen Button (Mobile Only) */}
+          {isFullscreen && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleFullscreen();
+              }}
+              className="md:hidden absolute top-2 right-2 sm:top-3 sm:right-3 z-40 p-2 sm:p-2.5 rounded-full bg-[#121212]/95 backdrop-blur-xl border border-white/10 text-white hover:bg-white/10 transition-all duration-300 touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center shadow-lg active:scale-95"
+              title="Exit fullscreen"
+            >
+              <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2} />
+            </button>
+          )}
+
           {/* Left Sidebar - Undo/Redo/Clear */}
           <div className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 sm:gap-2 z-30">
             <button
@@ -1467,6 +1495,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Top Right Buttons (Mobile Fullscreen Only) */}
       {!isAnnotating && isFullscreen && (
         <div className="md:hidden absolute top-2 right-2 sm:top-3 sm:right-3 z-30 flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {/* Exit Fullscreen Button */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleFullscreen();
+            }}
+            className="p-2 sm:p-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white hover:bg-white/20 transition-all duration-300 touch-manipulation min-h-[36px] sm:min-h-[40px] min-w-[36px] sm:min-w-[40px] flex items-center justify-center active:scale-95"
+            title="Exit fullscreen"
+          >
+            <Minimize2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </button>
+
           {/* Toggle Annotations Button */}
           {annotations.length > 0 && (
             <button
