@@ -395,6 +395,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
     }
   }, [messages]);
 
+  // Initial scroll to bottom on mount (if messages exist)
+  useEffect(() => {
+    if (scrollRef.current && messages.length > 0) {
+      // Use setTimeout to ensure DOM is fully rendered
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 0);
+    }
+  }, []); // Only run on mount
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -422,11 +434,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, currentU
   }, [isRecording, pendingAttachment]);
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden" style={{ minHeight: '100dvh' }}>
+    <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 scroll-smooth" ref={scrollRef} style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* Date Divider */}
-        <div className="flex justify-center py-4">
+        <div className="flex justify-center pt-2 pb-4">
           <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest bg-neutral-900/50 px-3 py-1 rounded-full border border-white/5 backdrop-blur-sm">
             Today
           </span>

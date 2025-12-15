@@ -1628,8 +1628,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-shrink-0">
-              {/* Toggle Annotations Button - Desktop Only */}
+            {/* Buttons - Hidden on mobile when fullscreen (moved to top-right), visible on desktop always */}
+            <div className={`${isFullscreen ? 'hidden md:flex' : 'flex'} items-center gap-1.5 sm:gap-2 md:gap-3 flex-shrink-0`}>
+              {/* Toggle Annotations Button */}
               {annotations.length > 0 && (
                 <button
                   onClick={() => setShowAnnotations(!showAnnotations)}
@@ -1651,12 +1652,52 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 </button>
               )}
 
-              {/* Analyze/Draw Button - Desktop Only */}
+              {/* Analyze/Draw Button - Merged with fullscreen on mobile */}
               <button
-                onClick={enterAnnotationMode}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // On mobile, if not fullscreen, go fullscreen first, then enter annotation mode
+                  const isMobile = window.innerWidth < 768;
+                  if (isMobile && !isFullscreen) {
+                    if (containerRef.current) {
+                      try {
+                        if (containerRef.current.requestFullscreen) {
+                          await containerRef.current.requestFullscreen();
+                        } else if ((containerRef.current as any).webkitRequestFullscreen) {
+                          await (containerRef.current as any).webkitRequestFullscreen();
+                        } else if ((containerRef.current as any).mozRequestFullScreen) {
+                          await (containerRef.current as any).mozRequestFullScreen();
+                        } else if ((containerRef.current as any).msRequestFullscreen) {
+                          await (containerRef.current as any).msRequestFullscreen();
+                        }
+                        // Wait a bit for fullscreen to activate, then enter annotation mode
+                        setTimeout(() => {
+                          enterAnnotationMode();
+                        }, 100);
+                      } catch (error) {
+                        // If fullscreen fails, just enter annotation mode
+                        enterAnnotationMode();
+                      }
+                    }
+                  } else {
+                    // On desktop or already fullscreen, just enter annotation mode
+                    enterAnnotationMode();
+                  }
+                }}
                 className="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white hover:bg-sequence-orange hover:border-sequence-orange hover:shadow-lg hover:shadow-orange-900/20 transition-all duration-300 group/analyze touch-manipulation min-h-[36px] sm:min-h-[40px] active:scale-95"
               >
-                 <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/analyze:animate-bounce" />
+                 {/* On mobile, show fullscreen icon when not fullscreen, otherwise show pencil */}
+                 <span className="md:hidden">
+                   {!isFullscreen ? (
+                     <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                   ) : (
+                     <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/analyze:animate-bounce" />
+                   )}
+                 </span>
+                 <span className="hidden md:block">
+                   <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/analyze:animate-bounce" />
+                 </span>
                  <span className="text-xs sm:text-sm font-semibold tracking-wide hidden xs:inline">Draw</span>
               </button>
 
@@ -1667,7 +1708,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   e.stopPropagation();
                   toggleFullscreen();
                 }}
-                className="p-2 sm:p-2.5 md:p-3 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors backdrop-blur-sm relative z-50 touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center"
+                className="hidden md:flex p-2 sm:p-2.5 md:p-3 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors backdrop-blur-sm relative z-50 touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[44px] sm:min-h-[44px] items-center justify-center"
                 title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />}
